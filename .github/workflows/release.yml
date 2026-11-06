@@ -1,0 +1,48 @@
+name: Build downloads
+
+# Publishing a release builds the game for Windows, Mac and Linux (each with its own Java runtime)
+# and attaches the downloads to that release. Run it by hand to just test the builds.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: KestrelIsle-Windows.zip
+          - os: macos-latest
+            asset: KestrelIsle-Mac-AppleSilicon.zip
+          - os: ubuntu-latest
+            asset: KestrelIsle-Linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Build the game and package it with its own Java runtime
+        shell: bash
+        run: bash package.sh "${{ matrix.asset }}"
+      - name: Keep the build with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" "dist/${{ matrix.asset }}" --clobber
+          if [ "${{ matrix.os }}" = ubuntu-latest ]; then gh release upload "$TAG" dist/kestrel-isle.jar --clobber; fi

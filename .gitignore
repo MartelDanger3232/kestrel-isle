@@ -1,0 +1,8 @@
+out/
+build/
+dist/
+save.properties
+.DS_Store
+shots/*
+!shots/sheet.png
+!shots/north-and-life.png
