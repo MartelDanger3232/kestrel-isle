@@ -97,6 +97,22 @@ final class Places {
     final List<float[]> pods = new ArrayList<>();
     /** Grapple posts out on the island, {x, ground y, z}: the claw bites the ring on top. */
     final List<float[]> posts = new ArrayList<>();
+    /** A treasure chest out in the world; opened chests are remembered by id in the save. */
+    static final class Chest {
+        final String id;
+        final float x, y, z, yaw;
+        float anim;
+
+        Chest(String id, float x, float y, float z, float yaw) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.yaw = yaw;
+        }
+    }
+
+    final List<Chest> chests = new ArrayList<>();
     /** Hot-air vents in the desert, {x, y, z}: the Windcloak rides them high. */
     final List<float[]> vents = new ArrayList<>();
     /** Tents at the rangers' outpost: {x, y, z, yaw}. */
@@ -165,6 +181,8 @@ final class Places {
             else for (int i = 0; i < 3; i++) addPickup(G20, t[0] + M.sin(i * 2.1f) * 2.5f, t[1] + M.cos(i * 2.1f) * 2.5f, "mesa" + k + "-" + i);
         }
         vents.add(new float[]{sunGate.x - 9, w.height(sunGate.x - 9, sunGate.z - 4), sunGate.z - 4});
+        ventBeside(1518, 830);
+        chest("starweave", 1518, 830, 0);
         spawnX = villageX;
         spawnZ = villageZ - 14;
 
@@ -217,6 +235,9 @@ final class Places {
         }
         addPickup(G20, 707.2f, 199.9f, "stack-g");
         addPickup(PIECE, 723.3f, 177.9f, "piece-stack");
+        chest("dye-gold", 720.9f, 176.1f, M.PI);
+        chest("dye-snow", 452, 1597, M.PI);
+        chest("gleams-grove", grove[0] + 3, grove[1] - 2.5f, 2);
         scatter(seed);
         // Later flattening may have softened a mesa's edge into a ramp; cut them sheer again.
         for (float[] m : mesas) stamp(m);
@@ -237,6 +258,11 @@ final class Places {
         }
         npcs.add(new Npc("ranger", Characters.RANGER, x + 2.5f, y, z - 2.2f, M.PI, 6));
         signs.add(new Sign(x + 4.5f, y, z - 10, 0, "RANGERS' OUTPOST  -  Mind the wolves.  Rimeholt stands north, atop the mesa."));
+    }
+
+    private void chest(String id, float x, float z, float yaw) {
+        chests.add(new Chest(id, x, w.height(x, z), z, yaw));
+        reserved.add(new float[]{x, z, 2});
     }
 
     /** Sela's nomads camp among the dunes: tents, a fire, a shrine and a sign pointing the way. */

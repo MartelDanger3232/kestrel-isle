@@ -8,7 +8,7 @@ import java.util.function.IntConsumer;
 
 /** The running game: levels, combat, projectiles, pickups and screen flow. Story content lives in Story. */
 final class Game {
-    enum Screen { TITLE, PLAY, DIALOG, FLUTE, MENU, MAP, PAUSE, OVER, END, REST, LEVEL, TRAVEL }
+    enum Screen { TITLE, PLAY, DIALOG, FLUTE, MENU, MAP, PAUSE, OVER, END, REST, LEVEL, TRAVEL, GEAR }
 
     static final int ARROW = 0, FIREBALL = 1, SEED = 2, WATERBALL = 3, LANTERN = 4, ROCK = 5, P_EMBER = 6, P_FROST = 7, P_RADIANT = 8;
     static final int CONTAINER = 7;
@@ -18,6 +18,8 @@ final class Game {
         boolean sword, shield, flute, bow, bombBag, claw, ascended, bowOut, frostbrand, longclaw, windcloak, stormcloak, sunRelic;
         /** Side quests: two bits each (0 unknown, 1 asked, 2 item in hand, 3 done); wolves counts Hessa's hunt. */
         int quests, wolves;
+        /** The weapon, outfit and cape dye in use, and bitmasks of those owned. */
+        int weapon, weapons = 1, outfit, outfits = 1, dye, dyes = 1;
         int arrows, bombs, gleams, pieces, songs, stones, item;
         int hearts = 3, level = 1, vig, end, mnd, str, arc, swordLv, flasks = 3, maxFlasks = 3, spells, spell;
     }
@@ -140,6 +142,7 @@ final class Game {
                 if (in.any(KeyEvent.VK_D, KeyEvent.VK_RIGHT, KeyEvent.VK_E)) cycleItem(1);
             }
             case MAP -> { if (in.any(KeyEvent.VK_M, KeyEvent.VK_ESCAPE)) screen = Screen.PLAY; }
+            case GEAR -> gearMenu();
             case PAUSE -> { if (in.any(KeyEvent.VK_ESCAPE, KeyEvent.VK_ENTER)) screen = Screen.PLAY; }
             case OVER -> {
                 overT += dt;
@@ -164,7 +167,13 @@ final class Game {
             screen = Screen.PAUSE;
             return;
         }
-        if (in.any(KeyEvent.VK_TAB, KeyEvent.VK_I)) {
+        if (in.any(KeyEvent.VK_I)) {
+            screen = Screen.GEAR;
+            gearCol = 0;
+            gearRow = gear.weapon;
+            return;
+        }
+        if (in.any(KeyEvent.VK_TAB)) {
             screen = Screen.MENU;
             return;
         }
@@ -302,9 +311,68 @@ final class Game {
         return best;
     }
 
-    float swordMult() { return (1 + .12f * gear.str) * (1 + .3f * gear.swordLv) * (gear.ascended ? 1.5f : 1); }
+    float swordMult() { return (1 + .12f * gear.str) * (1 + .3f * gear.swordLv) * (gear.ascended ? 1.5f : 1) * (gear.outfit == Arms.REGALIA ? 1.2f : 1); }
 
-    float spellMult() { return (1 + .15f * gear.arc) * (gear.ascended ? 1.5f : 1) * (gear.sunRelic ? 1.25f : 1); }
+    float spellMult() { return (1 + .15f * gear.arc) * (gear.ascended ? 1.5f : 1) * (gear.sunRelic ? 1.25f : 1) * (gear.outfit == Arms.STARWEAVE ? 1.3f : 1); }
+
+    /** Which column (weapons, outfits, dyes) and row the gear screen has selected. */
+    int gearCol, gearRow;
+
+    /** The gear screen: W/S pick, A/D switch column, E or Enter equips, I (or Tab, Esc) closes. */
+    private void gearMenu() {
+        if (in.any(KeyEvent.VK_I, KeyEvent.VK_TAB, KeyEvent.VK_ESCAPE)) {
+            screen = Screen.PLAY;
+            return;
+        }
+        int[] rows = {Arms.WEAPON.length, Arms.OUTFIT.length, Arms.DYE.length};
+        int turn = in.any(KeyEvent.VK_A, KeyEvent.VK_LEFT) ? 2 : in.any(KeyEvent.VK_D, KeyEvent.VK_RIGHT) ? 1 : 0;
+        if (turn > 0) {
+            // A new column starts on what's being worn there.
+            gearCol = (gearCol + turn) % 3;
+            gearRow = gearCol == 0 ? gear.weapon : gearCol == 1 ? gear.outfit : gear.dye;
+        }
+        if (in.any(KeyEvent.VK_W, KeyEvent.VK_UP)) gearRow = (gearRow + rows[gearCol] - 1) % rows[gearCol];
+        if (in.any(KeyEvent.VK_S, KeyEvent.VK_DOWN)) gearRow = (gearRow + 1) % rows[gearCol];
+        if (!in.any(KeyEvent.VK_E, KeyEvent.VK_ENTER, KeyEvent.VK_SPACE)) return;
+        if (!owns(gearCol, gearRow)) {
+            audio.sfx(Audio.CLANG);
+            return;
+        }
+        switch (gearCol) {
+            case 0 -> gear.weapon = gearRow;
+            case 1 -> gear.outfit = gearRow;
+            default -> gear.dye = gearRow;
+        }
+        audio.sfx(Audio.PICKUP);
+        story.save();
+    }
+
+    /** Whether the hero owns weapon (kind 0), outfit (1) or dye (2) number i. */
+    boolean owns(int kind, int i) { return ((kind == 0 ? gear.weapons : kind == 1 ? gear.outfits : gear.dyes) & 1 << i) != 0; }
+
+    /** A charged blow's burst: every foe within r of (x, z) is hit, and lesser ones reel if stagger is set. */
+    void blast(float x, float z, float r, float dmg, boolean stagger) {
+        for (Foe f : new ArrayList<>(foes)) {
+            if (!f.alive() || f.state == Foe.HIDE || M.dist(x, z, f.x, f.z) > r + f.radius() * .5f) continue;
+            if (f.damage(this, Foe.SPIN, dmg * swordMult(), f.x, f.centerY(), f.z) && stagger && f.alive()) f.stagger();
+        }
+    }
+
+    /** The hammer's weight: cracked walls and ice give way in dungeons, and rubble crumbles out on the island. */
+    void smash(float x, float z) {
+        if (dungeon == null) {
+            story.bombedField(x, z);
+            return;
+        }
+        for (Dungeon.Thing t : dungeon.things)
+            if (t.kind == 'X' && !t.on && M.dist(x, z, t.x, t.z) < 2.6f) {
+                t.on = true;
+                sparks(t.x, 1.5f, t.z, 0x8a8478, 24);
+                shake(.4f);
+                audio.sfx(Audio.SECRET);
+            }
+        dungeon.melt(x, z, 2.4f, this);
+    }
 
     /** Whether warm air rises at (x, y, z): over campfires and desert vents outside, over vents in dungeons. */
     float updraft(float x, float y, float z) {
@@ -426,6 +494,7 @@ final class Game {
 
     void swordStrike(Hero h, float arc, float range, float dmg) {
         boolean spin = arc >= 360;
+        if (gear.weapon == Arms.HAMMER && !spin) smash(h.x + M.sin(h.yaw) * 1.6f, h.z + M.cos(h.yaw) * 1.6f);
         dmg *= swordMult();
         if (gear.ascended && (spin || dmg >= 1.5f * swordMult())) shootFriendly(P_RADIANT, h, 24, 1.5f * swordMult());
         int samples = spin ? 8 : 3;

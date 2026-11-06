@@ -191,6 +191,12 @@ final class Scene {
                 r.point(v[0] + M.sin(a) * rr, v[1] + .3f + f * 30, v[2] + M.cos(a) * rr, .07f + f * .12f, 0xe8d2a0, (int) (170 * (1 - f)));
             }
         }
+        for (Places.Chest c : pl.chests) {
+            if (M.dist(c.x, c.z, r.cx, r.cz) > 200 || !r.visible(c.x, c.y + .5f, c.z, 1.2f)) continue;
+            xf.identity().translate(c.x, c.y, c.z).rotY(c.yaw);
+            r.mesh(Models.CHEST, xf);
+            r.mesh(Models.LID, new Xf().set(xf).translate(0, .6f, -.38f).rotX(-1.9f * c.anim));
+        }
         for (float[] tn : pl.tents)
             if (M.dist(tn[0], tn[2], r.cx, r.cz) < 250 && r.visible(tn[0], tn[1] + 1.2f, tn[2], 2.5f)) r.mesh(Models.TENT, xf.identity().translate(tn[0], tn[1], tn[2]).rotY(tn[3]));
         for (float[] s : pl.shrines)
@@ -222,7 +228,7 @@ final class Scene {
 
     private void hero() {
         Hero h = g.hero;
-        Rig R = Characters.HERO;
+        Rig R = Arms.dressed(g.gear);
         boolean flicker = h.invuln > 0 && g.hurtFlash > 0 && ((int) (g.time * 22) & 1) == 0 && h.st != Hero.State.DEAD;
         if (flicker) return;
         xf.identity().translate(h.x, h.y, h.z).rotY(h.yaw);
@@ -234,7 +240,9 @@ final class Scene {
         if (g.gear.sword) {
             if (drawn) tmp.set(handR).translate(0, -.27f, 0).rotX(M.PI / 2 - .35f);
             else tmp.set(torso).translate(.14f, .42f, -.17f).rotZ(-.55f).rotX(M.PI / 2 + .25f);
-            r.mesh(Characters.SWORD, tmp);
+            r.mesh(Arms.MESH[g.gear.weapon], tmp);
+            if (g.gear.weapon == Arms.FANGS && drawn && !h.blocking)
+                r.mesh(Characters.FANG, new Xf().set(handL).translate(0, -.27f, 0).rotX(M.PI / 2 - .35f));
             if (swinging) {
                 if (trailN == TRAIL) {
                     System.arraycopy(hilt, 3, hilt, 0, (TRAIL - 1) * 3);
@@ -242,13 +250,13 @@ final class Scene {
                     trailN--;
                 }
                 apply(tmp, 0, 0, .25f, hilt, trailN);
-                apply(tmp, 0, 0, 1.05f, tip, trailN);
+                apply(tmp, 0, 0, Arms.TIP[g.gear.weapon], tip, trailN);
                 trailN++;
             } else trailN = Math.max(0, trailN - 2);
         }
         if (g.gear.shield) {
             if (h.blocking) tmp.set(xf).translate(-.08f, 1.12f, .45f).rotX(M.PI / 2);
-            else if (drawn || h.locked) tmp.set(handL).translate(-.07f, -.14f, 0).rotZ(M.PI / 2);
+            else if ((drawn || h.locked) && g.gear.weapon != Arms.FANGS) tmp.set(handL).translate(-.07f, -.14f, 0).rotZ(M.PI / 2);
             else tmp.set(torso).translate(0, .28f, -.19f).rotX(-M.PI / 2);
             r.mesh(Characters.SHIELD, tmp);
         }

@@ -213,7 +213,7 @@ final class Foe {
         if (!alive() || state == HIDE) return false;
         if (riposteT > 0 && (src == SWORD || src == SPIN)) {
             riposteT = 0;
-            dmg *= 3;
+            dmg *= g.gear.weapon == Arms.FANGS ? 5 : 3;
             g.say("Riposte!");
             g.shake(.45f);
             g.sparks(px, py, pz, 0xffd870, 28);
@@ -236,8 +236,8 @@ final class Foe {
         if (src != STAR) switch (kind) {
             case SENTRY -> {
                 float toHero = M.atan2(h.x - x, h.z - z);
-                if (src == CLAW && armour) {
-                    // The claw tears the tower shield away for a while.
+                if ((src == CLAW || src == SWORD && g.gear.weapon == Arms.HAMMER) && armour) {
+                    // The claw tears the tower shield away for a while; the hammer smashes it aside.
                     armour = false;
                     shieldT = 7;
                     g.sparks(x, y + 1.1f, z, 0x8a8e96, 12);

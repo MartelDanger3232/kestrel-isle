@@ -16,6 +16,16 @@ Along the way:
 - **The Windcloak:** press Space in mid-air to glide. Warm air over campfires and desert vents carries you up, and old offerings wait on top of the desert mesas.
 - **The Stormdrake:** once you fly, a colossal drake rides the storms over the mountain. Darken its three glowing storm-scales to bring it down.
 - **Parry:** raise your shield just as a blow lands. The attacker reels, and your next sword strike is a riposte for triple damage.
+- **Arsenal and attire:** press I for the gear screen.
+  - **Weapons:** five, each with its own reach, speed, weight and charged move:
+    - the Keeper's Sword;
+    - the huge Emberfall Greatsword;
+    - the long Tidecaller Spear;
+    - the lightning-fast Wind Fangs;
+    - the Rimebreaker Hammer, which smashes walls, ice, rubble and shields.
+  - **Outfits:** six that change your look and give a perk: faster stamina, speed and longer glides, heavy armour, stronger spells or harder blows.
+  - **Cape dyes:** colour your cape.
+  - **Where to find them:** Oskar, Hessa, Sela and Pell sell gear, friends give it as thanks, and treasure chests hide the rest.
 - **The grapple claw** works out in the world too:
   - grapple the gold-lit posts on cliffs, spires and sea stacks;
   - lock on and yank enemies to you;
@@ -65,7 +75,7 @@ Progress autosaves to `save.properties` in a `.kestrel-isle` folder in your home
 | E | talk, read, open, ride/dismount, rest at a shrine |
 | G | send Juniper away (the Song of the Steed calls her back) |
 | H | hint for wherever you are |
-| Tab · M · Esc | satchel · map · pause (Q quits from pause) |
+| Tab · I · M · Esc | satchel · gear (weapons, outfits, dyes) · map · pause (Q quits from pause) |
 
 Rolling, swinging and blocking use stamina (the green bar). Rest at Lantern Shrines to heal, refill draughts, level up five stats and fast-travel. Resting brings monsters back. If you fall, your gleams stay where you died until you reach them again. Each boss teaches a spell, Oskar the smith sharpens your sword for gleams, and holding all four Wardstones makes you Ascended.
 

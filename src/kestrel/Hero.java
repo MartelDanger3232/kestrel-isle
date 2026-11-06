@@ -13,6 +13,8 @@ final class Hero {
     float x, y, z, vx, vy, vz, yaw, stT, invuln, swordOutT, runAmt, phase, capeA, capeV, holdT, chargeT;
     float stamina = 80, maxStamina = 80, fp = 40, maxFp = 40, castAt;
     private float stamDelay, haulT;
+    /** Cuts landed so far in a charged whirlwind. */
+    private int hits;
     /** How long the shield has been up: a guard raised just before a blow lands is a parry. */
     private float guardT;
     private boolean drank;
@@ -69,9 +71,10 @@ final class Hero {
         return true;
     }
 
-    private void regen(float dt) {
-        if ((stamDelay -= dt) <= 0) stamina = Math.min(maxStamina, stamina + (blocking ? 14 : 48) * dt);
-        fp = Math.min(maxFp, fp + 1.2f * dt);
+    private void regen(float dt, Game g) {
+        int fit = g.gear.outfit;
+        if ((stamDelay -= dt) <= 0) stamina = Math.min(maxStamina, stamina + (blocking ? 14 : 48) * (fit == Arms.FURS ? 1.4f : 1) * dt);
+        fp = Math.min(maxFp, fp + 1.2f * (fit == Arms.STARWEAVE ? 3 : 1) * dt);
     }
 
     /** While mounted, Juniper does the moving; the hero just sits, swings and animates. */
@@ -85,7 +88,7 @@ final class Hero {
         st = State.RIDE;
         invuln -= dt;
         swordOutT -= dt;
-        regen(dt);
+        regen(dt, g);
         animate(dt, g);
     }
 
@@ -95,7 +98,7 @@ final class Hero {
         stT += dt;
         invuln -= dt;
         swordOutT -= dt;
-        regen(dt);
+        regen(dt, g);
         float mx = (in.down(KeyEvent.VK_D) ? 1 : 0) - (in.down(KeyEvent.VK_A) ? 1 : 0);
         float mz = (in.down(KeyEvent.VK_W) ? 1 : 0) - (in.down(KeyEvent.VK_S) ? 1 : 0);
         float len = M.hypot(mx, mz);
@@ -156,22 +159,18 @@ final class Hero {
                 faceTarget(dt, 12);
                 chargeT += dt;
                 if (!in.down(KeyEvent.VK_J) && !in.down(Input.MOUSE_L)) {
-                    if (chargeT > .5f && spend(20)) {
+                    int w = g.gear.weapon;
+                    if (chargeT > .5f && spend(20 * Arms.STAMINA[w])) {
                         setState(State.SPIN);
-                        anim.restart(Characters.H_SPIN, .05f);
+                        anim.restart(w == Arms.SWORD || w == Arms.FANGS ? Characters.H_SPIN : w == Arms.SPEAR ? SLASH[0] : SLASH[2], .05f);
                         struck = false;
+                        hits = 0;
                         g.sfx(Audio.SPIN);
                     } else setState(State.MOVE);
                 }
                 ground(g, false);
             }
-            case SPIN -> {
-                if (!struck && stT > .18f) {
-                    struck = true;
-                    g.swordStrike(this, 360, 2.9f, 2);
-                }
-                if (stT > .55f) setState(State.MOVE);
-            }
+            case SPIN -> charged(dt, g);
             case HURT -> {
                 step(L, hopX * dt, hopZ * dt);
                 hopX *= .9f;
@@ -259,7 +258,8 @@ final class Hero {
         blocking = (in.down(KeyEvent.VK_K) || in.down(Input.MOUSE_R)) && g.gear.shield;
         guardT = blocking ? guardT + dt : 0;
         if (blocking) swordOutT = 4;
-        float speed = blocking ? 1.6f : locked ? 4.2f : 6;
+        int fit = g.gear.outfit;
+        float speed = (blocking ? 1.6f : locked ? 4.2f : 6) * (fit == Arms.WRAPS ? 1.12f : fit == Arms.PLATE ? .92f : 1);
         boolean ice = L.icy(x, z);
         // On ice you build speed slowly and glide on after letting go.
         slideX = ice ? M.approach(slideX, moving ? ix * speed : 0, 2.2f, dt) : moving ? ix * speed : 0;
@@ -352,13 +352,65 @@ final class Hero {
                     return;
                 }
                 g.say("Out of arrows.");
-            } else if (g.gear.sword && spend(7)) {
+            } else if (g.gear.sword && spend(7 * Arms.STAMINA[g.gear.weapon])) {
                 startAttack(g, 0);
                 return;
             }
         }
         if (in.pressed(KeyEvent.VK_F) && g.useItem(this)) return;
         ground(g, true);
+    }
+
+    /** Each weapon's charged move, released after holding the attack button. */
+    private void charged(float dt, Game g) {
+        float fx = M.sin(yaw), fz = M.cos(yaw);
+        switch (g.gear.weapon) {
+            case Arms.GREATSWORD -> {
+                if (!struck && stT > .32f) {
+                    struck = true;
+                    g.swordStrike(this, 140, 3.6f, 3.2f);
+                    g.blast(x + fx * 2.6f, z + fz * 2.6f, 3.4f, 2, false);
+                    g.sparks(x + fx * 2.6f, y + .4f, z + fz * 2.6f, 0xff8a3a, 30);
+                    g.shake(.5f);
+                    g.sfx(Audio.BOOM);
+                }
+                if (stT > .8f) setState(State.MOVE);
+            }
+            case Arms.SPEAR -> {
+                if (stT < .32f) step(g.level, fx * 15 * dt, fz * 15 * dt);
+                if (!struck && stT > .12f) {
+                    struck = true;
+                    g.swordStrike(this, 40, 5.5f, 2.6f);
+                }
+                if (stT > .5f) setState(State.MOVE);
+            }
+            case Arms.FANGS -> {
+                if (hits < 3 && stT > .12f + hits * .16f) {
+                    hits++;
+                    g.swordStrike(this, 360, 2.3f, .9f);
+                    g.sfx(Audio.SWING);
+                }
+                if (stT > .62f) setState(State.MOVE);
+            }
+            case Arms.HAMMER -> {
+                if (!struck && stT > .4f) {
+                    struck = true;
+                    g.blast(x, z, 5, 2.4f, true);
+                    g.smash(x + fx * 1.6f, z + fz * 1.6f);
+                    for (int k = 0; k < 10; k++) g.sparks(x + M.sin(k * .63f) * 3, y + .2f, z + M.cos(k * .63f) * 3, 0x9fe8ff, 4);
+                    g.shake(1);
+                    g.sfx(Audio.SLAM);
+                }
+                if (stT > .9f) setState(State.MOVE);
+            }
+            default -> {
+                if (!struck && stT > .18f) {
+                    struck = true;
+                    g.swordStrike(this, 360, 2.9f, 2);
+                }
+                if (stT > .55f) setState(State.MOVE);
+            }
+        }
     }
 
     private void startAttack(Game g, int k) {
@@ -373,15 +425,16 @@ final class Hero {
     }
 
     private void attack(float dt, Game g, Input in) {
-        float len = SLASH[combo].length, hitAt = combo == 2 ? .24f : .16f;
+        int w = g.gear.weapon;
+        float tm = Arms.TIME[w], len = SLASH[combo].length * tm, hitAt = (combo == 2 ? .24f : .16f) * tm;
         step(g.level, M.sin(yaw) * (stT < hitAt ? 2.5f : 0) * dt, M.cos(yaw) * (stT < hitAt ? 2.5f : 0) * dt);
         faceTarget(dt, 10);
         if (!struck && stT > hitAt) {
             struck = true;
-            g.swordStrike(this, combo == 2 ? 100 : 150, 2.4f, combo == 2 ? 2 : 1);
+            g.swordStrike(this, Arms.ARC[w] * (combo == 2 ? .67f : 1), Arms.REACH[w], (combo == 2 ? 2 : 1) * Arms.DMG[w]);
         }
         if (stT > .1f && in.any(KeyEvent.VK_J, Input.MOUSE_L)) comboQueued = true;
-        if (stT > len * .8f && comboQueued && combo < 2 && spend(combo == 1 ? 11 : 7)) {
+        if (stT > len * .8f && comboQueued && combo < 2 && spend((combo == 1 ? 11 : 7) * Arms.STAMINA[w])) {
             startAttack(g, combo + 1);
             return;
         }
@@ -435,7 +488,7 @@ final class Hero {
         vz = M.approach(vz, M.cos(yaw) * ahead, 1.6f, dt);
         vy = M.approach(vy, lift > 0 ? 9 : -2.3f, lift > 0 ? 2.5f : 3, dt);
         if (lift <= 0 && !g.gear.stormcloak) {
-            stamina -= 6 * dt;
+            stamina -= (g.gear.outfit == Arms.WRAPS ? 3 : 6) * dt;
             stamDelay = .6f;
         }
         fallFrom = y;
@@ -580,7 +633,8 @@ final class Hero {
             g.tip("parry", "Blocked! Raise your shield just as a blow lands to PARRY: it costs nothing, the foe reels, and your next sword strike is a riposte for triple damage.");
             return false;
         }
-        hp -= dmg;
+        // Forgeplate turns a third of every blow aside.
+        hp -= g.gear.outfit == Arms.PLATE ? Math.max(1, Math.round(dmg * .65f)) : dmg;
         invuln = 1.1f;
         hopX = dx / d * 7;
         hopZ = dz / d * 7;
@@ -596,7 +650,8 @@ final class Hero {
     }
 
     private void animate(float dt, Game g) {
-        anim.update(dt);
+        // Heavy weapons swing slower, light ones faster.
+        anim.update(st == State.ATTACK ? dt / Arms.TIME[g.gear.weapon] : dt);
         float speed = M.hypot(vx, vz);
         if (st == State.RIDE) {
             java.util.Arrays.fill(pose, 0);

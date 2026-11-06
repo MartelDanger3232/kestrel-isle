@@ -44,8 +44,8 @@ final class Characters {
                 "legUL", "hips", -.095f, -.05f, 0, legU, "legLL", "legUL", 0, -.4f, 0, legL,
                 "legUR", "hips", .095f, -.05f, 0, legU, "legLR", "legUR", 0, -.4f, 0, legL};
         if (!cape) return new Rig(base);
-        Mesh capeU = cloth(new float[]{-.21f, 0, .21f}, new float[]{-.03f, -.065f, -.03f}, new float[]{-.25f, 0, .25f}, new float[]{-.05f, -.095f, -.05f}, .42f, capeCol);
-        Mesh capeL = cloth(new float[]{-.25f, 0, .25f}, new float[]{0, -.035f, 0}, new float[]{-.28f, 0, .28f}, new float[]{0, -.04f, 0}, .36f, M.scale(capeCol, .92f));
+        Mesh[] panels = cape(capeCol);
+        Mesh capeU = panels[0], capeL = panels[1];
         Object[] all = java.util.Arrays.copyOf(base, base.length + 12);
         System.arraycopy(new Object[]{"capeU", "torso", 0, .46f, -.13f, capeU, "capeL", "capeU", 0, -.42f, -.05f, capeL}, 0, all, base.length, 12);
         return new Rig(all);
@@ -61,6 +61,12 @@ final class Characters {
         return m;
     }
 
+    /** A cape's two cloth panels in colour col, hung the way humanoid() hangs them. */
+    static Mesh[] cape(int col) {
+        return new Mesh[]{cloth(new float[]{-.21f, 0, .21f}, new float[]{-.03f, -.065f, -.03f}, new float[]{-.25f, 0, .25f}, new float[]{-.05f, -.095f, -.05f}, .42f, col),
+                cloth(new float[]{-.25f, 0, .25f}, new float[]{0, -.035f, 0}, new float[]{-.28f, 0, .28f}, new float[]{0, -.04f, 0}, .36f, M.scale(col, .92f))};
+    }
+
     // ---- the hero ---------------------------------------------------------------------------------
 
     /** The Keeper's grandchild: dark hair, rust tunic, teal scarf, a leather pauldron and a hood worn down. */
@@ -71,6 +77,15 @@ final class Characters {
             true, 0x7a2e1e);
     static final Mesh SWORD = new Mesh().box(0, 0, .06f, .025f, .025f, .08f, TEAL).box(0, 0, .15f, .11f, .025f, .03f, 0x4a4e58)
             .box(0, 0, .6f, .018f, .045f, .43f, STEEL).prism(0, 1.03f, 0, .045f, 0, .01f, 4, STEEL);
+    static final Mesh GREATSWORD = new Mesh().box(0, 0, .08f, .03f, .03f, .17f, 0x3a2a20).box(0, 0, .28f, .21f, .035f, .045f, 0x4a4e58)
+            .box(0, 0, 1.0f, .03f, .09f, .68f, 0x5a5e68).box(0, 0, .98f, .033f, .022f, .6f, 0xff7a2a | Mesh.GLOW)
+            .segment(0, 0, 1.68f, 0, 0, 1.9f, .09f, .005f, 4, 0x5a5e68);
+    static final Mesh TIDE_SPEAR = new Mesh().segment(0, 0, -.7f, 0, 0, 1.6f, .028f, .025f, 6, WOOD).box(0, 0, 1.6f, .035f, .035f, .05f, TEAL)
+            .segment(0, 0, 1.62f, 0, 0, 2.08f, .075f, .004f, 4, 0xd8e0e8).blob(0, -.07f, 1.52f, .03f, .09f, .03f, 2, 4, 0x2a7a8a, 0);
+    static final Mesh FANG = new Mesh().box(0, 0, .05f, .02f, .02f, .07f, 0x2a1e18).box(0, 0, .13f, .06f, .02f, .02f, 0xc8a050)
+            .box(0, 0, .3f, .012f, .035f, .17f, 0xc8d4dc).segment(0, 0, .47f, 0, 0, .58f, .035f, .003f, 4, 0xc8d4dc);
+    static final Mesh HAMMER = new Mesh().segment(0, 0, -.15f, 0, 0, 1.0f, .032f, .03f, 6, 0x4a3424).box(0, 0, 1.06f, .17f, .13f, .13f, 0x6a7a8a)
+            .box(0, 0, 1.06f, .18f, .05f, .05f, 0x9fe8ff | Mesh.GLOW).box(.2f, 0, 1.06f, .03f, .1f, .1f, 0x4a5a6a).box(-.2f, 0, 1.06f, .03f, .1f, .1f, 0x4a5a6a);
     static final Mesh SHIELD = new Mesh().prism(0, -.03f, 0, .31f, .31f, .06f, 12, WOOD).prism(0, .03f, 0, .2f, .2f, .01f, 12, 0x6a4a2a)
             .prism(0, .04f, 0, .09f, .09f, .01f, 8, TEAL).box(0, .035f, 0, .3f, .008f, .025f, 0x5a5e66);
     static final Mesh FLUTE = new Mesh().box(0, 0, 0, .03f, .03f, .16f, 0xe8dcc0).box(0, .031f, .05f, .012f, .002f, .012f, 0x3a2a20)
@@ -329,6 +344,30 @@ final class Characters {
             new Mesh().prism(0, .28f, 0, .2f, .12f, .12f, 8, 0xc8a050), null, false, 0);
     static final Rig FISHER = humanoid(0xc08a64, 0x6a6a6a, 0x3a5a8a, 0x4a4a4a, 0x2a2a2a,
             new Mesh().prism(0, .26f, 0, .26f, .1f, .08f, 8, 0xd8c070), null, false, 0);
+    // The hero's outfits: the same body and skeleton in different clothes, so every animation fits them all.
+    static final Rig HERO_FURS = humanoid(SKIN, 0x3b2a20, 0x7a6248, 0x4a4238, 0x2a2420,
+            new Mesh().blob(0, .085f, -.06f, .165f, .165f, .15f, 2, 8, 0xd8d2c4, 0),
+            new Mesh().tube(0, .36f, 0, .19f, .14f, .15f, .11f, .12f, 12, 0xd8d2c4).box(0, .2f, 0, .205f, .015f, .13f, 0x4a3424)
+                    .blob(-.25f, .42f, 0, .1f, .07f, .1f, 2, 8, 0xd8d2c4, 0).blob(.25f, .42f, 0, .1f, .07f, .1f, 2, 8, 0xd8d2c4, 0), true, 0x8a7a62);
+    static final Rig HERO_WRAPS = humanoid(SKIN, 0x3b2a20, 0xd8c8a0, 0x8a6a4a, 0x6a4a30,
+            new Mesh().blob(0, .1f, -.02f, .16f, .13f, .16f, 2, 8, 0xe8dcc0, 0).box(0, -.02f, .135f, .11f, .04f, .02f, 0xe8dcc0),
+            new Mesh().box(0, .2f, 0, .205f, .03f, .13f, 0xc8643a).blob(.1f, .1f, .1f, .05f, .12f, .04f, 2, 6, 0xc8643a, 0), true, 0xd8b884);
+    static final Rig HERO_PLATE = humanoid(SKIN, 0x3b2a20, 0x8a8e96, 0x5a5e66, 0x3a3e46,
+            new Mesh().blob(0, .07f, -.01f, .155f, .15f, .16f, 2, 10, 0x9aa0aa, 0).box(0, .04f, .145f, .1f, .015f, .01f, 0x1a1a1a)
+                    .prism(0, .2f, -.02f, .03f, 0, .1f, 4, 0x7a1e1e),
+            new Mesh().blob(0, .27f, .04f, .19f, .19f, .14f, 2, 10, 0xa8aeb8, 0).blob(-.25f, .42f, 0, .12f, .08f, .12f, 2, 8, 0x9aa0aa, 0)
+                    .blob(.25f, .42f, 0, .12f, .08f, .12f, 2, 8, 0x9aa0aa, 0).box(0, .2f, 0, .205f, .02f, .13f, 0x4a3424), true, 0x7a1e1e);
+    static final Rig HERO_STARWEAVE = humanoid(SKIN, 0x3b2a20, 0x2a2e6a, 0x2a2e6a, 0x1a1a3a,
+            new Mesh().prism(0, .13f, -.01f, .23f, .23f, .015f, 12, 0x2a2e6a).prism(0, .14f, -.01f, .17f, .02f, .36f, 8, 0x2a2e6a)
+                    .box(.04f, .3f, .04f, .02f, .02f, .02f, 0xffe9a0 | Mesh.GLOW),
+            new Mesh().box(0, .2f, 0, .205f, .02f, .13f, 0xd8a83a).box(.08f, .3f, .128f, .012f, .012f, .004f, 0xffe9a0 | Mesh.GLOW)
+                    .box(-.06f, .14f, .128f, .012f, .012f, .004f, 0xffe9a0 | Mesh.GLOW).box(.02f, .38f, .128f, .01f, .01f, .004f, 0xbfe8ff | Mesh.GLOW), true, 0x3a3e8a);
+    static final Rig HERO_REGALIA = humanoid(SKIN, 0x3b2a20, 0x2a1e2e, 0x1a141e, 0x111111,
+            new Mesh().prism(0, .14f, 0, .14f, .13f, .05f, 8, 0x6a5a7a).prism(.1f, .19f, 0, .025f, 0, .14f, 4, 0x6a5a7a).prism(-.1f, .19f, 0, .025f, 0, .14f, 4, 0x6a5a7a)
+                    .prism(0, .19f, .08f, .025f, 0, .12f, 4, 0x6a5a7a).box(0, .16f, .135f, .02f, .02f, .01f, 0xc87aff | Mesh.GLOW),
+            new Mesh().blob(0, .27f, .04f, .19f, .19f, .14f, 2, 10, 0x2a1e2e, 0).box(0, .27f, .175f, .012f, .14f, .005f, 0xc87aff | Mesh.GLOW)
+                    .blob(-.25f, .42f, 0, .12f, .08f, .12f, 2, 8, 0x3a2a3e, 0).blob(.25f, .42f, 0, .12f, .08f, .12f, 2, 8, 0x3a2a3e, 0), true, 0x3a1a4a);
+
     static final Rig RANGER = humanoid(0xd0a07c, 0x3a2a1e, 0x4a5a4a, 0x3a3a34, 0x2a2420,
             new Mesh().blob(0, .09f, -.07f, .16f, .16f, .14f, 2, 8, 0xd8d2c4, 0), new Mesh().box(0, .1f, 0, .2f, .2f, .14f, 0x6a5a44), true, 0x5a6a5a);
     static final Rig NOMAD = humanoid(0xa87a54, 0x1a120c, 0xd8c8a0, 0x8a6a4a, 0x5a4030,

@@ -12,7 +12,7 @@ import javax.imageio.ImageIO;
 final class Dev {
     private Dev() {}
 
-    private static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night", "glide", "temple", "drake"};
+    private static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night", "glide", "temple", "drake", "gear", "attire"};
 
     static void shots(File dir) throws Exception {
         Story.saving = false;
@@ -26,7 +26,7 @@ final class Dev {
             Scene scene = new Scene(g, r);
             Hud hud = new Hud(g, r);
             setup(g, i);
-            if (i == 3) scene.zoom = 2.3f;
+            if (i == 3 || i == 16) scene.zoom = 2.3f;
             for (int k = 0; k < 4; k++) scene.render(1 / 60f);
             BufferedImage frame = new BufferedImage(1280, 720, BufferedImage.TYPE_INT_RGB);
             Graphics2D fg = frame.createGraphics();
@@ -50,7 +50,7 @@ final class Dev {
         g.gear.arrows = 20;
         g.time = 40 + i;
         g.screen = i == 0 ? Game.Screen.TITLE : Game.Screen.PLAY;
-        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f, 16, 12, 15}[i];
+        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f, 16, 12, 15, 10, 15.5f}[i];
         g.climate.update(0);
         switch (i) {
             case 0 -> {}
@@ -213,6 +213,38 @@ final class Dev {
                 g.camPitch = .3f;
                 g.messageT = 0;
             }
+            case 15 -> {
+                g.story.flags.add("intro");
+                Game.Gear gr = g.gear;
+                gr.weapons = 31;
+                gr.outfits = 1 | 1 << Arms.FURS | 1 << Arms.PLATE | 1 << Arms.WRAPS;
+                gr.dyes = 1 | 1 << 1 | 1 << 2 | 1 << 5;
+                gr.weapon = Arms.GREATSWORD;
+                gr.outfit = Arms.PLATE;
+                gr.dye = 1;
+                float x = pl.villageX + 6, z = pl.villageZ - 8;
+                h.place(x, g.world.height(x, z), z);
+                h.yaw = g.camYaw = 2.4f;
+                g.camPitch = -.15f;
+                g.screen = Game.Screen.GEAR;
+                g.gearCol = 0;
+                g.gearRow = Arms.GREATSWORD;
+            }
+            case 16 -> {
+                g.story.flags.add("intro");
+                g.gear.weapons = 31;
+                g.gear.weapon = Arms.HAMMER;
+                g.gear.outfits = 63;
+                g.gear.outfit = Arms.FURS;
+                g.gear.dye = 2;
+                g.gear.dyes = 127;
+                float x = pl.outpostX - 3, z = pl.outpostZ - 6;
+                h.place(x, g.world.height(x, z), z);
+                h.yaw = 2.2f;
+                h.swordOutT = 3;
+                g.camYaw = h.yaw + M.PI - .5f;
+                g.camPitch = -.05f;
+            }
             case 11 -> {
                 g.story.flags.add("intro");
                 float x = pl.villageX - 4, z = pl.villageZ - 26;
@@ -281,7 +313,7 @@ final class Dev {
         int[] keys = {KeyEvent.VK_W, KeyEvent.VK_A, KeyEvent.VK_S, KeyEvent.VK_D, KeyEvent.VK_SPACE, KeyEvent.VK_SHIFT, KeyEvent.VK_J,
                 KeyEvent.VK_K, KeyEvent.VK_F, KeyEvent.VK_Q, KeyEvent.VK_X, KeyEvent.VK_C, KeyEvent.VK_V, KeyEvent.VK_R, KeyEvent.VK_T,
                 KeyEvent.VK_E, KeyEvent.VK_G, KeyEvent.VK_H, KeyEvent.VK_Z, KeyEvent.VK_1, KeyEvent.VK_2, KeyEvent.VK_3, KeyEvent.VK_4,
-                KeyEvent.VK_5, KeyEvent.VK_ESCAPE, KeyEvent.VK_ENTER, KeyEvent.VK_TAB, KeyEvent.VK_M, Input.MOUSE_L, Input.MOUSE_R,
+                KeyEvent.VK_5, KeyEvent.VK_ESCAPE, KeyEvent.VK_ENTER, KeyEvent.VK_TAB, KeyEvent.VK_M, KeyEvent.VK_I, Input.MOUSE_L, Input.MOUSE_R,
                 KeyEvent.VK_W, KeyEvent.VK_W, KeyEvent.VK_J, KeyEvent.VK_E, KeyEvent.VK_ENTER};
         java.util.Map<String, Integer> seen = new java.util.LinkedHashMap<>();
         int frames = 0;
@@ -299,6 +331,14 @@ final class Dev {
             gr.arrows = 30;
             gr.bombs = 20;
             gr.gleams = 3000;
+            // Every weapon, outfit and dye, picked at random, plus the glider.
+            gr.weapons = 31;
+            gr.outfits = 63;
+            gr.dyes = 127;
+            gr.weapon = rnd.nextInt(5);
+            gr.outfit = rnd.nextInt(6);
+            gr.dye = rnd.nextInt(7);
+            gr.windcloak = true;
             g.story.flags.add("intro");
             g.screen = Game.Screen.PLAY;
             if (level >= 0) g.story.enterDungeon(level);
@@ -308,6 +348,7 @@ final class Dev {
                     in.force(k, rnd.nextFloat() < .6f);
                 }
                 if (f % 90 == 0) for (int k : keys) in.force(k, false);
+                if (f % 1500 == 0) gr.weapon = rnd.nextInt(5);
                 in.addDelta((float) rnd.nextGaussian() * 25, (float) rnd.nextGaussian() * 8);
                 if (level < 0 && f % 700 == 0) {
                     float x = 200 + rnd.nextFloat() * 1650, z = 200 + rnd.nextFloat() * 1650;
@@ -595,6 +636,131 @@ final class Dev {
         if (downed) drake.damage(g, Foe.SWORD, 2, drake.headX, drake.headY, drake.headZ);
         check(downed && drake.hp < dHp, "the Stormdrake comes down on you; darkening its three storm-scales grounds it for the sword");
         drake.calm(g);
+        h.invuln = 0;
+    }
+
+    /** Each weapon's weight and reach, the hammer's smashing, the outfits, the gear screen and a treasure chest. */
+    private static void armsTests(Game g, Input in) {
+        Hero h = g.hero;
+        Places pl = g.world.places;
+        g.screen = Game.Screen.PLAY;
+        g.foes.clear();
+        g.gear.weapons = 31;
+        g.gear.bowOut = false;
+        h.invuln = 99;
+        float fx = pl.villageX + 30, fz = pl.villageZ + 60;
+        float[] got = new float[5];
+        for (int w = 0; w < 5; w++) {
+            g.gear.weapon = w;
+            h.place(fx, g.world.height(fx, fz), fz);
+            h.yaw = g.camYaw = 0;
+            h.stamina = h.maxStamina;
+            Foe dummy = new Foe(Foe.Kind.WOLF, h.x, h.y, h.z + 1.6f);
+            dummy.hp = dummy.maxHp = 50;
+            dummy.frozenT = 9;
+            g.foes.add(dummy);
+            run(g, .05f);
+            tap(g, in, KeyEvent.VK_J);
+            run(g, .9f);
+            got[w] = 50 - dummy.hp;
+            g.foes.clear();
+        }
+        float m = g.swordMult();
+        boolean weights = Math.abs(got[0] - m) < .01f && got[1] > got[0] * 1.7f && got[4] > got[1] && got[3] < got[0] && got[2] > got[0];
+        check(weights, "every weapon swings with its own weight (sword " + got[0] + ", greatsword " + got[1] + ", spear " + got[2] + ", fangs " + got[3] + ", hammer " + got[4] + ")");
+
+        float[] reach = new float[2];
+        for (int k = 0; k < 2; k++) {
+            g.gear.weapon = k == 0 ? Arms.SWORD : Arms.SPEAR;
+            h.place(fx, g.world.height(fx, fz), fz);
+            h.yaw = g.camYaw = 0;
+            h.stamina = h.maxStamina;
+            Foe far = new Foe(Foe.Kind.WOLF, h.x, h.y, h.z + 4);
+            far.hp = far.maxHp = 50;
+            far.frozenT = 9;
+            g.foes.add(far);
+            run(g, .05f);
+            tap(g, in, KeyEvent.VK_J);
+            run(g, .9f);
+            reach[k] = 50 - far.hp;
+            g.foes.clear();
+        }
+        check(reach[0] == 0 && reach[1] > 0, "the spear reaches a foe 4 m away that the sword can't (sword " + reach[0] + ", spear " + reach[1] + ")");
+
+        g.gear.weapon = Arms.HAMMER;
+        h.place(fx, g.world.height(fx, fz), fz);
+        h.stamina = h.maxStamina;
+        Foe[] ring = new Foe[3];
+        for (int k = 0; k < 3; k++) {
+            ring[k] = new Foe(Foe.Kind.WOLF, h.x + M.sin(k * 2.1f) * 3, h.y, h.z + M.cos(k * 2.1f) * 3);
+            ring[k].hp = ring[k].maxHp = 50;
+            g.foes.add(ring[k]);
+        }
+        in.force(KeyEvent.VK_J, true);
+        run(g, 1.6f);
+        in.force(KeyEvent.VK_J, false);
+        run(g, .6f);
+        boolean quake = true;
+        for (Foe f : ring) quake &= f.hp < 50 && (f.state == Foe.STUN || f.riposteT > 0);
+        check(quake, "the hammer's charged quake hits and staggers every foe around you");
+        g.foes.clear();
+
+        g.story.enterDungeon(1);
+        Dungeon forge = g.dungeon;
+        g.foes.clear();
+        Dungeon.Thing wall = null;
+        for (Dungeon.Thing t : forge.things) if (t.kind == 'X') wall = t;
+        float[] spot = null;
+        for (int[] d : new int[][]{{0, 1}, {0, -1}, {1, 0}, {-1, 0}}) {
+            char c = forge.at(wall.i + d[0], wall.j + d[1]);
+            if (spot == null && c != '#' && c != ' ' && forge.floor(forge.cx(wall.i + d[0]), forge.cz(wall.j + d[1])) < 3) spot = new float[]{forge.cx(wall.i + d[0]), forge.cz(wall.j + d[1])};
+        }
+        h.place(spot[0], forge.floor(spot[0], spot[1]), spot[1]);
+        h.yaw = g.camYaw = M.atan2(wall.x - h.x, wall.z - h.z);
+        h.stamina = h.maxStamina;
+        run(g, .05f);
+        tap(g, in, KeyEvent.VK_J);
+        run(g, 1);
+        check(wall.on, "the Rimebreaker Hammer smashes a cracked wall, no bomb needed");
+        g.story.exitDungeon();
+        g.screen = Game.Screen.PLAY;
+
+        h.invuln = 0;
+        h.hp = h.maxHp;
+        g.gear.outfit = Arms.GARB;
+        g.hurtHero(4, h.x + 1, h.z);
+        int plain = h.maxHp - h.hp;
+        h.invuln = 0;
+        h.hp = h.maxHp;
+        g.gear.outfits |= 1 << Arms.PLATE;
+        g.gear.outfit = Arms.PLATE;
+        g.hurtHero(4, h.x + 1, h.z);
+        int plated = h.maxHp - h.hp;
+        check(plain == 4 && plated == 3, "Forgeplate armour turns aside a third of a blow (" + plain + " -> " + plated + ")");
+        h.invuln = 99;
+        g.screen = Game.Screen.PLAY;
+
+        g.gear.outfit = Arms.GARB;
+        g.gear.outfits |= 1 << Arms.WRAPS;
+        tap(g, in, KeyEvent.VK_I);
+        boolean opened = g.screen == Game.Screen.GEAR;
+        tap(g, in, KeyEvent.VK_D);
+        tap(g, in, KeyEvent.VK_S);
+        tap(g, in, KeyEvent.VK_S);
+        tap(g, in, KeyEvent.VK_E);
+        tap(g, in, KeyEvent.VK_I);
+        check(opened && g.gear.outfit == Arms.WRAPS && g.screen == Game.Screen.PLAY,
+                "the gear screen (I) changes outfits (opened=" + opened + ", outfit=" + g.gear.outfit + ", screen=" + g.screen + ")");
+
+        Places.Chest star = null;
+        for (Places.Chest c : pl.chests) if (c.id.equals("starweave")) star = c;
+        h.place(star.x + 1.2f, star.y, star.z);
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_E);
+        dialogs(g, in);
+        check(g.owns(1, Arms.STARWEAVE) && star.anim == 1 && g.story.flags.contains("chest:starweave"), "the chest atop the desert mesa holds the Starweave Robe");
+        g.gear.weapon = Arms.SWORD;
+        g.gear.outfit = Arms.GARB;
         h.invuln = 0;
     }
 
@@ -941,6 +1107,7 @@ final class Dev {
 
         northTests(g, in);
         skyTests(g, in);
+        armsTests(g, in);
 
         Game fresh = new Game(in, new Audio(false));
         fresh.screen = Game.Screen.PLAY;

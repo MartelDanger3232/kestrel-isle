@@ -138,6 +138,17 @@ final class Models {
     static final Mesh SUN_DISC = m().vary(.05f).prism(0, 0, 0, .55f, .5f, .5f, 8, 0xb08a52).prism(0, .5f, 0, .5f, .5f, .04f, 12, 0xffe9a0 | Mesh.GLOW);
     static final Mesh SUN_SHAFT = m().prism(0, .5f, 0, .5f, .7f, 9, 8, 0xfff0b0 | Mesh.GLOW);
     static final Mesh MOUND = m().blob(0, 0, 0, .6f, .25f, .6f, 2, 8, 0xc8a46a, .15f);
+    /** Folded clothes tied with a cord: the item-get picture for an outfit. */
+    static Mesh bundle(int col) {
+        return m().box(0, .12f, 0, .34f, .12f, .26f, col).box(0, .27f, 0, .3f, .04f, .22f, M.scale(col, 1.15f)).box(0, .15f, 0, .35f, .03f, .03f, 0xd8c8a0)
+                .box(0, .15f, 0, .03f, .14f, .27f, 0xd8c8a0);
+    }
+
+    /** A little clay pot of dye. */
+    static Mesh pot(int col) {
+        return m().prism(0, 0, 0, .16f, .2f, .26f, 8, 0xb06a44).prism(0, .26f, 0, .17f, .17f, .02f, 8, col).prism(0, .27f, 0, .09f, 0, .1f, 6, col);
+    }
+
     static final Mesh WINDCLOAK = cloak(0x3a7a9a, 0x2a5a7a), STORMCLOAK = cloak(0x2a2e52, 0xf2c14e);
 
     /** The glider: a canopy of sailcloth held above the head on two cords. */

@@ -97,6 +97,10 @@ final class Story {
             float d = M.dist(h.x, h.z, n.x(), n.z());
             if (d < 2.6f) g.offer(d, "Talk to " + name(n.id()), () -> talkTo(n));
         }
+        for (Places.Chest c : pl.chests) {
+            float d = M.dist(h.x, h.z, c.x, c.z);
+            if (c.anim == 0 && d < 2.2f && Math.abs(h.y - c.y) < 1.5f) g.offer(d, "Open", () -> openChest(c));
+        }
         for (Places.Sign s : pl.signs) {
             float d = M.dist(h.x, h.z, s.x(), s.z());
             if (d < 2.2f) g.offer(d, "Read", () -> g.talk("Sign", null, s.text()));
@@ -172,9 +176,9 @@ final class Story {
                 if (quest(1) == 2) g.talk("Ansel", () -> {
                     setQuest(1, 3);
                     gear.gleams += 400;
-                    g.say("+400 gleams");
-                    save();
-                }, "My rod! Forty years that rod and I have fished together. I thought the wolves had it for sure.", "Take these gleams. No, I insist. The fish will be biting again soon, I can feel it.");
+                    grant(0, Arms.SPEAR, this::save);
+                }, "My rod! Forty years that rod and I have fished together. I thought the wolves had it for sure.",
+                        "Take these gleams. And this: my old harpoon, the Tidecaller. It reaches further than any sword. I'm too old to throw it now.");
                 else if (quest(1) == 3) g.talk("Ansel", null, (gear.stones & 15) == 15 ? "The fish are rising again. Whatever you're doing, Keeper, keep doing it." : "That rod's never felt luckier. Thank you again.");
                 else if (flags.contains("hessa") && quest(1) == 0) {
                     setQuest(1, 1);
@@ -208,6 +212,9 @@ final class Story {
         else if (g.dungeons[3] == null || !g.dungeons[3].bossDead) g.talk("Elder Maren", null, "All four. Wren would be so proud of you. Your grandmother, I mean. I still can't say her name without smiling.",
                 "The thing beneath the Crown wears Corvin's face. Whatever it says to you down there, remember: he asked to be stopped.",
                 "Go, Keeper. Bring the island its morning back.");
+        else if (!g.owns(1, Arms.REGALIA)) g.talk("Elder Maren", () -> grant(1, Arms.REGALIA, this::save),
+                "The lighthouse is burning again. I keep walking past it just to look.",
+                "This washed up below the Crown: Corvin's regalia, the Hollow gone out of it. He'd want a Keeper to wear it, and to wear it better than he did.");
         else g.talk("Elder Maren", null, "The lighthouse is burning again. I keep walking past it just to look.", "Corvin is at rest now. You did that.");
     }
 
@@ -236,7 +243,10 @@ final class Story {
             setQuest(5, 3);
             collect(Places.PIECE, "sela-reward");
         }, "You brought down the Stormdrake! The sand-readers will sing of this for a hundred years.", "Here. My mother found this in the dunes. It's warm, like a heartbeat.");
-        else g.talk("Sela", null, quest(5) == 1 ? "The Stormdrake circles the mountain. Get close and it will come down to you." : "The winds are kind today, Keeper.");
+        else g.choose("Sela", quest(5) == 1 ? "The Stormdrake circles the mountain. Get close and it will come down to you. Trade before you go?"
+                : "The winds are kind today, Keeper. Care to trade?", new String[]{"Trade", "Not now"}, pick -> {
+            if (pick == 0) wares("Sela", new int[][]{{0, Arms.FANGS, 450}, {1, Arms.WRAPS, 350}});
+        });
     }
 
     /** Once the Windcloak is found, the Stormdrake rides the skies over the mountain until it's brought down. */
@@ -273,6 +283,62 @@ final class Story {
         g.itemGet(d.spec.stone(), "Sun Relic", "The temple's heart burns in your hands. Your spells strike a quarter harder from now on. Sela will want to hear of this.", this::exitDungeon);
     }
 
+    /** A trader's wares, each {kind, index, price} with kind 0 a weapon, 1 an outfit and 2 a dye; owned ones are shown as yours. */
+    private void wares(String who, int[][] stock) {
+        Game.Gear gear = g.gear;
+        String[] opts = new String[stock.length + 1];
+        for (int i = 0; i < stock.length; i++)
+            opts[i] = itemName(stock[i][0], stock[i][1]) + (g.owns(stock[i][0], stock[i][1]) ? "  (yours)" : "  -  " + stock[i][2]);
+        opts[stock.length] = "Just looking";
+        g.choose(who, "Take a look. You have " + gear.gleams + " gleams.", opts, pick -> {
+            if (pick >= stock.length) return;
+            int[] s = stock[pick];
+            if (g.owns(s[0], s[1])) g.say("You already have that.");
+            else if (gear.gleams < s[2]) g.say("Not enough gleams.");
+            else {
+                gear.gleams -= s[2];
+                grant(s[0], s[1], this::save);
+            }
+        });
+    }
+
+    static String itemName(int kind, int i) { return kind == 0 ? Arms.WEAPON[i] : kind == 1 ? Arms.OUTFIT[i] : Arms.DYE[i] + " dye"; }
+
+    /** Hands over weapon (kind 0), outfit (1) or cape dye (2) number i with the item fanfare. */
+    void grant(int kind, int i, Runnable then) {
+        Game.Gear gr = g.gear;
+        switch (kind) {
+            case 0 -> {
+                gr.weapons |= 1 << i;
+                g.itemGet(Arms.MESH[i], Arms.WEAPON[i], Arms.WEAPON_HOW[i] + " Equip it on the gear screen (I).", then);
+            }
+            case 1 -> {
+                gr.outfits |= 1 << i;
+                g.itemGet(Arms.ICON[i], Arms.OUTFIT[i], Arms.OUTFIT_HOW[i] + " Wear it from the gear screen (I).", then);
+            }
+            default -> {
+                gr.dyes |= 1 << i;
+                g.itemGet(Arms.POT[i], Arms.DYE[i] + " Dye", "Colours your cape. Choose it on the gear screen (I).", then);
+            }
+        }
+    }
+
+    /** One of the island's treasure chests. */
+    private void openChest(Places.Chest c) {
+        flags.add("chest:" + c.id);
+        c.anim = 1;
+        g.sfx(Audio.CHEST);
+        switch (c.id) {
+            case "starweave" -> grant(1, Arms.STARWEAVE, this::save);
+            case "dye-gold" -> grant(2, 5, this::save);
+            case "dye-snow" -> grant(2, 6, this::save);
+            default -> {
+                g.gear.gleams += 300;
+                g.itemGet(Models.GLEAM[2], "300 gleams", "A forgotten stash, glittering in the grass.", this::save);
+            }
+        }
+    }
+
     /** Hessa, captain of the northern rangers: the way into Rimeholt, and a wolf hunt. */
     private void hessa() {
         Game.Gear gear = g.gear;
@@ -287,7 +353,8 @@ final class Story {
             gear.maxFlasks = Math.min(7, gear.maxFlasks + 1);
             gear.flasks = gear.maxFlasks;
             gear.gleams += 500;
-            g.itemGet(Characters.DRAUGHT, "Ranger's Draught", "Hessa adds a flask to your belt: one more Ember Draught (now " + gear.maxFlasks + "), and 500 gleams for the hunt.", this::save);
+            g.itemGet(Characters.DRAUGHT, "Ranger's Draught", "Hessa adds a flask to your belt: one more Ember Draught (now " + gear.maxFlasks + "), and 500 gleams for the hunt.",
+                    () -> grant(1, Arms.FURS, this::save));
         }, "Six fewer wolves on my roads. The supply sleds will run again.", "Here, ranger's pay, and something better.");
         else if (quest(3) == 0) {
             setQuest(3, 1);
@@ -295,7 +362,10 @@ final class Story {
             g.talk("Hessa", this::save, "One more thing, Keeper. The Frostfang packs have grown bold since the Hollow woke. They're cutting off our supply sleds.",
                     "Hunt six of them and come back. I'll make it worth your while.");
         } else if (quest(3) == 1) g.talk("Hessa", null, "Wolves hunted: " + Math.min(6, gear.wolves) + " of 6. They circle before they lunge. Hit them as they come in.");
-        else g.talk("Hessa", null, (gear.stones & 8) == 0 ? "Rimeholt is up on the mesa. Claw your way up the post on the cliff edge." : "The north is quiet for the first time in years. Go finish it, Keeper.");
+        else g.choose("Hessa", (gear.stones & 8) == 0 ? "Rimeholt is up on the mesa: claw your way up the post on the cliff edge. Need anything?"
+                : "The north is quiet for the first time in years. Need anything before you go?", new String[]{"Trade", "Not now"}, pick -> {
+            if (pick == 0) wares("Hessa", new int[][]{{0, Arms.HAMMER, 600}});
+        });
     }
 
     private void smithy() {
@@ -303,23 +373,26 @@ final class Story {
         String hint = gear.bombBag ? "Bombs crack old stone. There's a rubble-choked cave east of the river, and more on the coast."
                 : gear.bow ? "That forge gate? A lantern sits above it. Put an arrow through it and the old works will wake."
                 : "Rootdeep's up the north-west road. Ride, don't walk.";
-        if (gear.swordLv >= 5) {
-            g.talk("Oskar", null, "That blade's as fine as anything I've ever made. " + hint);
-            return;
-        }
         int cost = 150 << gear.swordLv;
-        g.choose("Oskar", "I can hone your sword to +" + (gear.swordLv + 1) + " for " + cost + " gleams. (You have " + gear.gleams + ".)",
-                new String[]{"Hone it", "Any advice?", "Not now"}, pick -> {
-                    if (pick == 1) g.talk("Oskar", null, hint);
-                    else if (pick == 0) {
-                        if (gear.gleams < cost) g.say("Not enough gleams.");
-                        else {
-                            gear.gleams -= cost;
-                            gear.swordLv++;
-                            g.sfx(Audio.CLANG);
-                            g.say("Keeper's Sword +" + gear.swordLv + "!");
-                            save();
+        boolean hone = gear.swordLv < 5;
+        String[] opts = hone ? new String[]{"Hone your blades to +" + (gear.swordLv + 1) + "  -  " + cost, "Browse the forge", "Any advice?", "Not now"}
+                : new String[]{"Browse the forge", "Any advice?", "Not now"};
+        g.choose("Oskar", (hone ? "Honing works on every blade you carry." : "Your blades are as fine as I can make them.") + " (You have " + gear.gleams + " gleams.)",
+                opts, pick -> {
+                    switch (hone ? pick : pick + 1) {
+                        case 0 -> {
+                            if (gear.gleams < cost) g.say("Not enough gleams.");
+                            else {
+                                gear.gleams -= cost;
+                                gear.swordLv++;
+                                g.sfx(Audio.CLANG);
+                                g.say("Your blades are now +" + gear.swordLv + "!");
+                                save();
+                            }
                         }
+                        case 1 -> wares("Oskar", new int[][]{{0, Arms.GREATSWORD, 500}, {1, Arms.PLATE, 700}});
+                        case 2 -> g.talk("Oskar", null, hint);
+                        default -> {}
                     }
                 });
     }
@@ -358,10 +431,14 @@ final class Story {
     private void shop() {
         Game.Gear gear = g.gear;
         String[] opts = {"Arrows x10  -  20", gear.bombBag ? "Bombs x5  -  30" : "Bombs (sold out)", flags.contains("shop-piece") ? "(sold)" : "Piece of Heart  -  150",
-                "Red Tonic: refill hearts  -  30", "Just looking"};
+                "Red Tonic: refill hearts  -  30", "Cape dyes", "Just looking"};
         g.choose("Pell", "Welcome! You have " + gear.gleams + " gleams. What'll it be?", opts, pick -> {
-            int[] cost = {20, 30, 150, 30, 0};
-            if (pick == 4) return;
+            int[] cost = {20, 30, 150, 30, 0, 0};
+            if (pick == 5) return;
+            if (pick == 4) {
+                wares("Pell", new int[][]{{2, 1, 60}, {2, 2, 60}, {2, 3, 60}, {2, 4, 60}});
+                return;
+            }
             boolean can = switch (pick) {
                 case 0 -> gear.bow;
                 case 1 -> gear.bombBag;
@@ -1340,7 +1417,8 @@ final class Story {
         int[] nums = {gr.sword ? 1 : 0, gr.shield ? 1 : 0, gr.flute ? 1 : 0, gr.bow ? 1 : 0, gr.bombBag ? 1 : 0, gr.claw ? 1 : 0,
                 gr.arrows, gr.bombs, gr.gleams, gr.pieces, gr.songs, gr.stones, gr.item, g.hero.maxHp, g.hero.hp,
                 gr.hearts, gr.level, gr.vig, gr.end, gr.mnd, gr.str, gr.arc, gr.swordLv, gr.maxFlasks, gr.spells, gr.spell, gr.ascended ? 1 : 0,
-                gr.frostbrand ? 1 : 0, gr.longclaw ? 1 : 0, gr.quests, gr.wolves, gr.windcloak ? 1 : 0, gr.stormcloak ? 1 : 0, gr.sunRelic ? 1 : 0};
+                gr.frostbrand ? 1 : 0, gr.longclaw ? 1 : 0, gr.quests, gr.wolves, gr.windcloak ? 1 : 0, gr.stormcloak ? 1 : 0, gr.sunRelic ? 1 : 0,
+                gr.weapon, gr.weapons, gr.outfit, gr.outfits, gr.dye, gr.dyes};
         StringBuilder sb = new StringBuilder();
         for (int v : nums) sb.append(v).append(',');
         p.setProperty("gear", sb.toString());
@@ -1411,6 +1489,14 @@ final class Story {
                 gr.stormcloak = n[32] == 1;
                 gr.sunRelic = n[33] == 1;
             }
+            if (n.length >= 40) {
+                gr.weapon = n[34];
+                gr.weapons = n[35] | 1;
+                gr.outfit = n[36];
+                gr.outfits = n[37] | 1;
+                gr.dye = n[38];
+                gr.dyes = n[39] | 1;
+            }
         } else gr.hearts = n[13] / 4;
         refill();
         String rs = p.getProperty("respawn");
@@ -1438,6 +1524,7 @@ final class Story {
         for (int i = 0; i < bs.size(); i++) if (flags.contains("boulder" + i)) bs.get(i)[3] = 0;
         for (java.util.List<Places.Pickup> list : g.world.places.pickups)
             for (Places.Pickup pk : list) if (pk.id != null && flags.contains("p:" + pk.id)) pk.taken = true;
+        for (Places.Chest c : g.world.places.chests) if (flags.contains("chest:" + c.id)) c.anim = 1;
         if ((gr.songs & STEED) != 0) g.horse.call(g);
         if (respawn != null) {
             if (respawn[0] >= 0) enterDungeon((int) respawn[0]);

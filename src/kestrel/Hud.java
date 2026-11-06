@@ -59,6 +59,7 @@ final class Hud {
                     case REST -> rest();
                     case LEVEL -> level();
                     case TRAVEL -> travel();
+                    case GEAR -> gear();
                     case OVER -> {
                         fill(new Color(20, 0, 0, (int) (200 * Math.min(1, g.overT))), 0, 0, w, h);
                         centered(huge, "You have fallen", h * .42f, INK);
@@ -168,7 +169,7 @@ final class Hud {
             float bx = w - 236 * s, by = 22 * s;
             boolean tools = gear.bombBag || gear.claw;
             panel(bx, by, 214 * s, (tools ? 62 : 36) * s);
-            text(mid, "Q  " + (gear.bow && gear.bowOut ? "Bow  x" + gear.arrows : "Sword"), bx + 12 * s, by + 24 * s, INK);
+            text(mid, "Q  " + (gear.bow && gear.bowOut ? "Bow  x" + gear.arrows : Arms.WEAPON_SHORT[gear.weapon]), bx + 12 * s, by + 24 * s, INK);
             if (tools) text(small, "F  " + (gear.item == 1 ? "Bombs  x" + gear.bombs : gear.item == 2 ? "Grapple Claw" : "(X to pick)") + "     X switch", bx + 12 * s, by + 48 * s, DIM);
         }
         if (g.dungeon != null) {
@@ -441,7 +442,56 @@ final class Hud {
         }
         if (open == 0) text(small, done > 0 ? "Nothing open right now." : "Talk to people. Some of them need help.", x + 540 * s, qy, DIM);
         if (done > 0) text(small, "Completed: " + done + " of " + Story.QUESTS.length, x + 540 * s, y + 448 * s, DIM);
-        text(small, "Tab to close", x + pw - 120 * s, y + ph - 18 * s, DIM);
+        text(small, "I: gear   ·   Tab to close", x + pw - 190 * s, y + ph - 18 * s, DIM);
+    }
+
+    /** The gear screen: weapons, outfits and cape dyes side by side, with what the selected one does. */
+    private void gear() {
+        fill(new Color(0, 0, 0, 160), 0, 0, w, h);
+        float pw = 960 * s, ph = 540 * s, x = (w - pw) / 2, y = (h - ph) / 2;
+        panel(x, y, pw, ph);
+        text(big, "Gear", x + 24 * s, y + 44 * s, INK);
+        Game.Gear gear = g.gear;
+        String[][] names = {Arms.WEAPON, Arms.OUTFIT, Arms.DYE};
+        String[] heads = {"Weapons", "Outfits", "Cape dyes"};
+        int[] worn = {gear.weapon, gear.outfit, gear.dye};
+        for (int c = 0; c < 3; c++) {
+            float cx = x + 24 * s + c * 310 * s, cy = y + 92 * s;
+            text(mid, heads[c], cx, cy, c == g.gearCol ? GOLD : DIM);
+            for (int i = 0; i < names[c].length; i++) {
+                float ry = cy + 18 * s + i * 34 * s;
+                boolean own = g.owns(c, i), sel = c == g.gearCol && i == g.gearRow;
+                if (sel) {
+                    g2.setColor(new Color(242, 193, 78, 55));
+                    g2.fillRoundRect((int) (cx - 8 * s), (int) ry, (int) (296 * s), (int) (30 * s), 10, 10);
+                }
+                if (c == 2 && own) {
+                    int col = Arms.DYE_COL[i];
+                    g2.setColor(new Color(col >> 16 & 255, col >> 8 & 255, col & 255));
+                    g2.fillOval((int) (cx + 250 * s), (int) (ry + 7 * s), (int) (16 * s), (int) (16 * s));
+                }
+                if (worn[c] == i) diamond(cx + 4 * s, ry + 15 * s, 6 * s, 1, GOLD);
+                text(small, own ? names[c][i] : "???", cx + 16 * s, ry + 21 * s, own ? (worn[c] == i ? GOLD : INK) : DIM);
+            }
+        }
+        int c = g.gearCol, i = g.gearRow;
+        boolean own = g.owns(c, i);
+        String about = !own ? "Not found yet. " + (c == 0 ? Arms.WEAPON_WHERE[i] : c == 1 ? Arms.OUTFIT_WHERE[i] : Arms.DYE_WHERE[i])
+                : c == 0 ? Arms.WEAPON_HOW[i] : c == 1 ? Arms.OUTFIT_HOW[i] : i == 0 ? "Each outfit's cape in its own colour." : "Dyes your cape.";
+        float ay = y + 360 * s;
+        text(mid, own ? names[c][i] : "???", x + 24 * s, ay, own ? INK : DIM);
+        for (String line : wrap(about, pw - 48 * s)) text(small, line, x + 24 * s, ay += 24 * s, DIM);
+        if (c == 0 && own) {
+            String[] stat = {"Damage", "Reach", "Speed"};
+            float[] val = {Arms.DMG[i] / 2.5f, Arms.REACH[i] / 3.7f, 1 / Arms.TIME[i] / 1.62f};
+            for (int k = 0; k < 3; k++) {
+                float sy = y + ph - 74 * s + k * 18 * s;
+                text(small, stat[k], x + 24 * s, sy + 9 * s, DIM);
+                fill(new Color(255, 255, 255, 30), x + 110 * s, sy, 200 * s, 10 * s);
+                fill(GOLD, x + 110 * s, sy, 200 * s * M.clamp(val[k], .05f, 1), 10 * s);
+            }
+        }
+        text(small, "W/S choose   ·   A/D switch column   ·   E equip   ·   I close", x + pw - 470 * s, y + ph - 18 * s, DIM);
     }
 
     private void map() {
