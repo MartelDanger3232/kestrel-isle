@@ -110,6 +110,7 @@ final class Characters {
             .7f, "armUL:-2.8 armLL:-.4 armUR:-2.2 armLR:-.9 legUL:-.9 legLL:1.1 legUR:-.3 legLR:.5");
     static final Rig.Clip H_LEDGE = new Rig.Clip(HERO, false, 0, "armUL:-2.8 armUR:-2.8 legUL:-1 legLL:1.3 root:-.5", .25f,
             "armUL:-1.2 armUR:-1.2 torso:.7 legUL:-1.4 legLL:1.7 legUR:-.4 legLR:.6 root:-.3", .45f, "torso:.2 legUL:-.4 legLL:.5 root:-.05");
+    static final Rig.Clip H_GLIDE = new Rig.Clip(HERO, true, 0, "armUL:-2.75,0,-.35 armUR:-2.75,0,.35 armLL:-.25 armLR:-.25 legUL:.15 legLL:.35 legUR:-.1 legLR:.25 torso:-.08");
     static final Rig.Clip H_AIR = new Rig.Clip(HERO, true, 0, "legUL:-.6 legLL:.9 legUR:.2 legLR:.4 armUL:-.6,0,-.5 armUR:-.6,0,.5 torso:.1");
     static final Rig.Clip H_AIM = new Rig.Clip(HERO, true, 0, "armUL:-1.57,-.12 armLL:-.02 armUR:-1.5,.8 armLR:-2 head:.04,-.2 torso:0,.42 legUL:-.3 legUR:.28 root:-.03",
             .7f, "armUL:-1.59,-.11 armLL:-.03 armUR:-1.52,.82 armLR:-2.02 head:.05,-.2 torso:.02,.43 legUL:-.3 legUR:.28 root:-.035",
@@ -264,6 +265,49 @@ final class Characters {
     static final Mesh FISH = new Mesh().blob(0, 0, 0, .055f, .09f, .25f, 2, 8, 0x9ab4c8, 0).twoSided().tri(0, 0, -.22f, 0, .11f, -.38f, 0, -.11f, -.38f, 0x7a94a8);
     static final Mesh BIRD = new Mesh().blob(0, .07f, 0, .05f, .05f, .08f, 2, 6, 0x5a4a3a, 0).blob(0, .11f, .07f, .035f, .035f, .035f, 2, 5, 0x6a5a48, 0)
             .box(0, .105f, .11f, .008f, .008f, .02f, 0xd8a83a).box(0, .07f, -.1f, .025f, .008f, .05f, 0x4a3a2a).smooth();
+    // ---- the desert and the storm --------------------------------------------------------------
+
+    private static final int SAND_C = 0xb07a3a, SAND_D = 0x8a5a28;
+
+    /** Dune Stalker: a sand-coloured scorpion that swims under the dunes and strikes with a glowing tail. */
+    static final Rig STALKER = new Rig(
+            "body", null, 0, .32f, 0, new Mesh().blob(0, 0, 0, .3f, .15f, .42f, 2, 8, SAND_C, .05f).blob(0, .02f, .38f, .2f, .12f, .14f, 2, 6, SAND_D, 0)
+                    .box(.08f, .08f, .5f, .025f, .02f, .01f, 0x111111).box(-.08f, .08f, .5f, .025f, .02f, .01f, 0x111111)
+                    .segment(.25f, -.04f, .22f, .55f, -.32f, .36f, .03f, .02f, 4, SAND_D).segment(-.25f, -.04f, .22f, -.55f, -.32f, .36f, .03f, .02f, 4, SAND_D)
+                    .segment(.27f, -.04f, 0, .6f, -.32f, 0, .03f, .02f, 4, SAND_D).segment(-.27f, -.04f, 0, -.6f, -.32f, 0, .03f, .02f, 4, SAND_D)
+                    .segment(.25f, -.04f, -.22f, .55f, -.32f, -.36f, .03f, .02f, 4, SAND_D).segment(-.25f, -.04f, -.22f, -.55f, -.32f, -.36f, .03f, .02f, 4, SAND_D).smooth(),
+            "tail", "body", 0, .08f, -.38f, new Mesh().segment(0, 0, 0, 0, .35f, -.25f, .07f, .06f, 6, SAND_C).segment(0, .35f, -.25f, 0, .7f, -.05f, .06f, .05f, 6, SAND_C)
+                    .segment(0, .7f, -.05f, 0, .72f, .25f, .05f, .025f, 6, SAND_C).blob(0, .7f, .3f, .06f, .06f, .08f, 2, 6, 0x8af04a | Mesh.GLOW, 0).smooth(),
+            "clawL", "body", -.24f, 0, .42f, new Mesh().segment(0, 0, 0, -.1f, 0, .3f, .045f, .045f, 5, SAND_D).blob(-.12f, 0, .42f, .1f, .06f, .12f, 2, 6, SAND_D, 0).smooth(),
+            "clawR", "body", .24f, 0, .42f, new Mesh().segment(0, 0, 0, .1f, 0, .3f, .045f, .045f, 5, SAND_D).blob(.12f, 0, .42f, .1f, .06f, .12f, 2, 6, SAND_D, 0).smooth());
+
+    /** Ashmaw, the sand wyrm of the Sunscour: a head of plated chitin and a long ringed body. */
+    static final Mesh ASHMAW_HEAD = new Mesh().blob(0, 0, 0, 1.05f, .85f, 1.3f, 3, 10, 0xb08a52, .06f).blob(0, .35f, -.1f, .9f, .55f, 1.05f, 2, 8, 0x8a6a3a, .08f)
+            .blob(.45f, .25f, .75f, .14f, .12f, .1f, 2, 6, 0xffb84a | Mesh.GLOW, 0).blob(-.45f, .25f, .75f, .14f, .12f, .1f, 2, 6, 0xffb84a | Mesh.GLOW, 0)
+            .segment(.5f, -.35f, .9f, .25f, -.25f, 1.7f, .14f, .03f, 5, 0xe8dcc0).segment(-.5f, -.35f, .9f, -.25f, -.25f, 1.7f, .14f, .03f, 5, 0xe8dcc0)
+            .blob(0, -.15f, 1, .5f, .35f, .25f, 2, 8, 0x3a1a0a, 0).smooth();
+    static final Mesh ASHMAW_SEG = new Mesh().blob(0, 0, 0, .85f, .75f, .7f, 3, 10, 0xb08a52, .06f).prism(0, .55f, 0, .25f, 0, .45f, 4, 0x8a6a3a).smooth();
+
+    private static Mesh drakeWing(float s) {
+        Mesh m = new Mesh().twoSided();
+        int[] tone = {0x34406a, 0x2a3458, 0x222a48};
+        float[][] tips = {{4.6f, .6f, .3f}, {4.2f, -.4f, -1.4f}, {2.6f, -.6f, -2.2f}, {1, -.3f, -1.6f}};
+        for (int i = 0; i + 1 < tips.length; i++) m.tri(0, 0, 0, tips[i][0] * s, tips[i][1], tips[i][2], tips[i + 1][0] * s, tips[i + 1][1], tips[i + 1][2], tone[i]);
+        return m.segment(0, 0, 0, 2.4f * s, .5f, .4f, .09f, .06f, 4, 0x1e2440).segment(2.4f * s, .5f, .4f, 4.6f * s, .6f, .3f, .06f, .02f, 4, 0x1e2440);
+    }
+
+    /** The Stormdrake: a slate-blue drake that rides the storms over the mountain, lightning caught in its scales. */
+    static final Rig STORMDRAKE = new Rig(
+            "body", null, 0, 0, 0, new Mesh().blob(0, 0, 0, .9f, .85f, 2, 3, 12, 0x2e3a5a, .05f).blob(0, -.35f, .2f, .7f, .55f, 1.6f, 3, 10, 0x5a6a8a, 0)
+                    .prism(0, .7f, .9f, .22f, 0, .55f, 4, 0x1e2440).prism(0, .7f, 0, .22f, 0, .5f, 4, 0x1e2440).prism(0, .65f, -.9f, .2f, 0, .45f, 4, 0x1e2440).smooth(),
+            "neck", "body", 0, .3f, 1.8f, new Mesh().segment(0, 0, 0, 0, .6f, 1.4f, .5f, .38f, 8, 0x2e3a5a).smooth(),
+            "head", "neck", 0, .65f, 1.45f, new Mesh().blob(0, 0, .35f, .5f, .45f, .8f, 2, 10, 0x2e3a5a, .04f).blob(0, -.15f, .95f, .32f, .22f, .45f, 2, 8, 0x5a6a8a, 0)
+                    .blob(.28f, .15f, .7f, .08f, .06f, .06f, 2, 6, 0xffe14a | Mesh.GLOW, 0).blob(-.28f, .15f, .7f, .08f, .06f, .06f, 2, 6, 0xffe14a | Mesh.GLOW, 0)
+                    .segment(.25f, .3f, .1f, .5f, .75f, -.55f, .09f, .02f, 4, 0xd8d0b8).segment(-.25f, .3f, .1f, -.5f, .75f, -.55f, .09f, .02f, 4, 0xd8d0b8).smooth(),
+            "tail", "body", 0, 0, -1.9f, new Mesh().segment(0, 0, 0, 0, -.2f, -2.2f, .5f, .3f, 8, 0x2e3a5a).segment(0, -.2f, -2.2f, 0, -.1f, -4.2f, .3f, .08f, 8, 0x2e3a5a)
+                    .prism(0, -.1f, -4.3f, .35f, 0, .6f, 4, 0xffe14a | Mesh.GLOW).smooth(),
+            "wingL", "body", -.75f, .45f, .4f, drakeWing(-1), "wingR", "body", .75f, .45f, .4f, drakeWing(1));
+
     static final Mesh ICICLE = new Mesh().prism(0, -1.2f, 0, .02f, .22f, 1.2f, 5, 0xbfe8ff | Mesh.GLOW);
 
     // ---- spells -------------------------------------------------------------------------------
@@ -287,6 +331,9 @@ final class Characters {
             new Mesh().prism(0, .26f, 0, .26f, .1f, .08f, 8, 0xd8c070), null, false, 0);
     static final Rig RANGER = humanoid(0xd0a07c, 0x3a2a1e, 0x4a5a4a, 0x3a3a34, 0x2a2420,
             new Mesh().blob(0, .09f, -.07f, .16f, .16f, .14f, 2, 8, 0xd8d2c4, 0), new Mesh().box(0, .1f, 0, .2f, .2f, .14f, 0x6a5a44), true, 0x5a6a5a);
+    static final Rig NOMAD = humanoid(0xa87a54, 0x1a120c, 0xd8c8a0, 0x8a6a4a, 0x5a4030,
+            new Mesh().blob(0, .1f, -.03f, .17f, .14f, .16f, 2, 8, 0xe8dcc0, 0).box(0, .02f, .135f, .1f, .03f, .02f, 0xc8643a),
+            new Mesh().box(0, .02f, 0, .21f, .05f, .15f, 0xc8643a), true, 0xd8b884);
     static final Rig CHILD = humanoid(0xf0c098, 0xc8782a, 0xd8a83a, 0x4a6a9a, LEATHER, null, null, false, 0);
 
     // ---- monsters -----------------------------------------------------------------------------

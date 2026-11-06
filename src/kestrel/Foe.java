@@ -2,7 +2,7 @@ package kestrel;
 
 /** Every enemy and boss, with its behaviour, weak points and drawing. */
 final class Foe {
-    enum Kind { THORNLING, BAT, SENTRY, SLIME, IMP, WOLF, BRAMBLE, GOLEM, SERPENT, KING, HOARWING }
+    enum Kind { THORNLING, BAT, SENTRY, SLIME, IMP, WOLF, STALKER, BRAMBLE, GOLEM, SERPENT, KING, HOARWING, ASHMAW, STORMDRAKE }
 
     static final int IDLE = 0, CHASE = 1, WINDUP = 2, ATTACK = 3, RECOVER = 4, STUN = 5, DEAD = 6, HIDE = 7, PERCH = 8;
     static final int SWORD = 0, SPIN = 1, ARROW = 2, BOMB = 3, CLAW = 4, STAR = 5;
@@ -12,6 +12,8 @@ final class Foe {
     float x, y, z, yaw, vy, homeX, homeZ, homeY, t, flash, deadT, alert, size = 1, cool, aux, tx, tz, headX, headY, headZ;
     int state, si = -1, sj = -1, bits;
     float hp, maxHp, frozenT, shieldT;
+    /** Set by a parry: while it lasts, the next sword blow is a riposte. */
+    float riposteT;
     boolean armour = true;
     private final float[] pose;
     private final Rig.Anim an = new Rig.Anim();
@@ -29,8 +31,11 @@ final class Foe {
             case SENTRY -> 6;
             case SLIME -> 4;
             case WOLF -> 5;
+            case STALKER -> 4;
             case KING -> 20;
             case HOARWING -> 14;
+            case ASHMAW -> 16;
+            case STORMDRAKE -> 22;
             default -> 12;
         };
         rig = switch (kind) {
@@ -43,6 +48,8 @@ final class Foe {
             case KING -> Characters.KING;
             case WOLF -> Characters.WOLF;
             case HOARWING -> Characters.HOARWING;
+            case STALKER -> Characters.STALKER;
+            case STORMDRAKE -> Characters.STORMDRAKE;
             default -> null;
         };
         pose = rig == null ? null : rig.newPose();
@@ -62,6 +69,9 @@ final class Foe {
             case IMP -> 10;
             case WOLF -> 12;
             case HOARWING -> 1000;
+            case STALKER -> 14;
+            case ASHMAW -> 1200;
+            case STORMDRAKE -> 2500;
             case BRAMBLE -> 250;
             case GOLEM -> 500;
             case SERPENT -> 800;
@@ -78,13 +88,18 @@ final class Foe {
             case SERPENT -> 1.4f;
             case KING -> 1.2f;
             case HOARWING -> 2f;
+            case STALKER -> .6f;
+            case ASHMAW -> 1.6f;
+            case STORMDRAKE -> 3;
             default -> .55f;
         };
     }
 
     float centerY() {
         return switch (kind) {
-            case BAT, KING, HOARWING -> y;
+            case BAT, KING, HOARWING, STORMDRAKE -> y;
+            case ASHMAW -> headY;
+            case STALKER -> y + .45f;
             case SLIME -> y + .5f * size;
             case BRAMBLE -> headY;
             case GOLEM -> y + 4.4f;
@@ -111,6 +126,8 @@ final class Foe {
                     : i == 1 && state == RECOVER && put(out, tx, y + .6f, tz);
             case SERPENT -> i == 0 && state != CHASE && put(out, headX, headY, headZ);
             case KING -> i == 0 && put(out, x + M.sin(yaw) * .3f, y + 2.45f, z + M.cos(yaw) * .3f);
+            case ASHMAW -> i == 0 && state == RECOVER && put(out, headX + M.sin(yaw) * .95f, headY - .1f, headZ + M.cos(yaw) * .95f);
+            case STORMDRAKE -> (bits & 1 << i) == 0 && state != STUN && state != IDLE && drakeScale(i, out);
             case HOARWING -> i == 0 ? put(out, x + M.sin(yaw) * .9f, y - .1f, z + M.cos(yaw) * .9f) : i == 1 && state == STUN && put(out, x, y + 1.6f, z);
             default -> i == 0 && put(out, x, centerY(), z);
         };
@@ -151,6 +168,17 @@ final class Foe {
             case SERPENT -> {
                 return d3(px, py, pz, headX, headY, headZ) < 1.8f ? 2 : 0;
             }
+            case ASHMAW -> {
+                if (state == WINDUP) return 0;
+                if (state == RECOVER && d3(px, py, pz, headX + M.sin(yaw) * .95f, headY - .1f, headZ + M.cos(yaw) * .95f) < 1.3f) return 2;
+                return d3(px, py, pz, headX, headY, headZ) < 1.9f ? 1 : 0;
+            }
+            case STORMDRAKE -> {
+                if (state == STUN && d3(px, py, pz, headX, headY, headZ) < 2.2f) return 2;
+                float[] p = new float[3];
+                for (int i = 0; i < 3; i++) if (point(i, p) && d3(px, py, pz, p[0], p[1], p[2]) < 1.5f) return 2;
+                return d3(px, py, pz, x, y, z) < 3.2f ? 1 : 0;
+            }
             case HOARWING -> {
                 if (d3(px, py, pz, x + M.sin(yaw) * .9f, y - .1f, z + M.cos(yaw) * .9f) < 1.3f) return 2;
                 return d3(px, py, pz, x, y + .3f, z) < 2.2f ? 1 : 0;
@@ -171,8 +199,25 @@ final class Foe {
     }
 
     /** Something hit this foe at a point. Returns true if the blow connected (armour and shields say no). */
+    /** Knocked off balance by a parry: lesser foes reel wide open, and the next sword blow is a riposte. */
+    void stagger() {
+        riposteT = 1.6f;
+        if (boss || kind == Kind.BAT || kind == Kind.SLIME) return;
+        setState(STUN);
+        tx = tz = 0;
+        t = -1.1f;
+        flash = 1;
+    }
+
     boolean damage(Game g, int src, float dmg, float px, float py, float pz) {
         if (!alive() || state == HIDE) return false;
+        if (riposteT > 0 && (src == SWORD || src == SPIN)) {
+            riposteT = 0;
+            dmg *= 3;
+            g.say("Riposte!");
+            g.shake(.45f);
+            g.sparks(px, py, pz, 0xffd870, 28);
+        }
         int where = hitTest(px, py, pz);
         if (boss && (src == ARROW || src == CLAW)) {
             // Shots that land close to a weak point count as hitting it, so armour around it can't swallow them.
@@ -242,6 +287,41 @@ final class Foe {
                 }
                 if (armour || where == 0) {
                     if (src == SWORD || src == ARROW) clang(g);
+                    return false;
+                }
+            }
+            case ASHMAW -> {
+                if (state == WINDUP) return false;
+                if (state == RECOVER && (src == ARROW || src == BOMB) && where == 2) {
+                    stun(g, 5);
+                    g.shake(.7f);
+                    g.sfx(Audio.SLAM);
+                    g.say("Ashmaw chokes and crashes into the sand! Strike its head!");
+                    return true;
+                }
+                if (state != STUN) {
+                    if (src == SWORD || src == SPIN || src == ARROW) clang(g);
+                    return false;
+                }
+            }
+            case STORMDRAKE -> {
+                if (state != STUN) {
+                    float[] p = new float[3];
+                    if (src == ARROW || src == CLAW)
+                        for (int i = 0; i < 3; i++)
+                            if (point(i, p) && d3(px, py, pz, p[0], p[1], p[2]) < 2.3f) {
+                                bits |= 1 << i;
+                                flash = 1;
+                                g.sparks(p[0], p[1], p[2], 0xffe14a, 18);
+                                g.sfx(Audio.STUN);
+                                if (bits == 7) {
+                                    stun(g, 7);
+                                    g.shake(.9f);
+                                    g.say("The Stormdrake crashes to the ground! Strike its head!");
+                                } else g.say("A storm-scale goes dark! (" + Integer.bitCount(bits) + "/3)");
+                                return true;
+                            }
+                    if (src == SWORD || src == SPIN || src == ARROW) clang(g);
                     return false;
                 }
             }
@@ -339,6 +419,7 @@ final class Foe {
         alert = Math.max(0, alert - dt);
         t += dt;
         cool -= dt;
+        riposteT -= dt;
         if (rig != null) an.update(dt);
         if (state == DEAD) {
             deadT += dt;
@@ -363,6 +444,9 @@ final class Foe {
             case KING -> king(dt, g, d, face);
             case WOLF -> wolf(dt, g, d, face, near);
             case HOARWING -> hoarwing(dt, g, d, face);
+            case STALKER -> stalker(dt, g, d, face, near);
+            case ASHMAW -> ashmaw(dt, g, d, face);
+            case STORMDRAKE -> drake(dt, g, d, face);
         }
     }
 
@@ -861,12 +945,256 @@ final class Foe {
 
     private float stunTime = 5;
 
+    private void stalker(float dt, Game g, float d, float face, boolean near) {
+        if (knockback(dt, g)) return;
+        switch (state) {
+            case HIDE -> {
+                // Burrowed: only a ripple of sand gives it away as it closes in.
+                aux += dt * 5;
+                if (d < 16 && near) {
+                    yaw = M.turn(yaw, face, 4 * dt);
+                    walk(g, M.sin(yaw) * 3.2f * dt, M.cos(yaw) * 3.2f * dt);
+                }
+                if (d < 2.4f && near && t > .6f) {
+                    setState(WINDUP);
+                    g.sparks(x, y + .2f, z, 0xd8b884, 12);
+                    g.sfx(Audio.ROLL);
+                }
+            }
+            case WINDUP -> {
+                yaw = M.turn(yaw, face, 6 * dt);
+                if (t > .6f) setState(ATTACK);
+            }
+            case ATTACK -> {
+                if (t > .12f && cool <= 0 && d < 2.6f && near) {
+                    g.hurtHero(2, x, z, true);
+                    cool = 1;
+                }
+                if (t > .4f) setState(RECOVER);
+            }
+            case RECOVER -> {
+                yaw = M.turn(yaw, face, 2 * dt);
+                if (t > 1.7f) setState(HIDE);
+            }
+            default -> setState(HIDE);
+        }
+    }
+
+    /** Ashmaw swims under the sand, bursts up beneath the hero, arcs over and dives; now and then it surfaces to roar. */
+    private void ashmaw(float dt, Game g, float d, float face) {
+        Hero h = g.hero;
+        boolean second = hp <= maxHp / 2;
+        float base = homeY;
+        switch (state) {
+            case HIDE -> {
+                yaw = M.turn(yaw, face, 2.5f * dt);
+                if (d > 3) walk(g, M.sin(yaw) * (second ? 7 : 5.5f) * dt, M.cos(yaw) * (second ? 7 : 5.5f) * dt);
+                if (t > (second ? 1.8f : 2.8f)) {
+                    setState(WINDUP);
+                    tx = h.x;
+                    tz = h.z;
+                    // Arc away along whichever heading lands on open sand.
+                    for (float turn : new float[]{0, M.PI / 2, -M.PI / 2, M.PI}) {
+                        float a = face + turn;
+                        if (g.level.floor(tx + M.sin(a) * 9, tz + M.cos(a) * 9) < base + .5f) {
+                            yaw = a;
+                            break;
+                        }
+                    }
+                }
+            }
+            case WINDUP -> {
+                if (t > (second ? .7f : .95f)) {
+                    setState(ATTACK);
+                    x = tx;
+                    z = tz;
+                    cool = 0;
+                    g.shake(.5f);
+                    g.sfx(Audio.BOOM);
+                    g.sparks(tx, base + .3f, tz, 0xd8b884, 28);
+                    if (M.dist(h.x, h.z, tx, tz) < 2.6f && h.y < base + 3) g.hurtHero(4, tx, tz, false);
+                }
+            }
+            case ATTACK -> {
+                float s = Math.min(1, t / 1.3f);
+                headX = tx + M.sin(yaw) * s * 9;
+                headZ = tz + M.cos(yaw) * s * 9;
+                headY = base - 1 + M.sin(s * M.PI) * 6.5f;
+                if (cool <= 0 && d3(h.x, h.y + 1, h.z, headX, headY, headZ) < 2.3f) {
+                    g.hurtHero(3, headX, headZ, false);
+                    cool = 1;
+                }
+                if (s >= 1) {
+                    x = headX;
+                    z = headZ;
+                    g.sparks(x, base + .3f, z, 0xd8b884, 20);
+                    g.sfx(Audio.SLAM);
+                    bits++;
+                    setState(bits % (second ? 3 : 2) == 0 ? RECOVER : HIDE);
+                }
+            }
+            case RECOVER -> {
+                headX = x;
+                headZ = z;
+                headY = base + 3.2f + M.sin(t * 2) * .2f;
+                yaw = M.turn(yaw, M.atan2(h.x - x, h.z - z), 3 * dt);
+                if (second && t > .8f && cool <= 0) {
+                    g.shoot(Game.SEED, headX + M.sin(yaw) * 1.2f, headY, headZ + M.cos(yaw) * 1.2f, h.x, h.y + 1, h.z, 13);
+                    cool = 1.1f;
+                }
+                if (t > (second ? 2.6f : 3.4f)) {
+                    setState(HIDE);
+                    g.sfx(Audio.ROLL);
+                }
+            }
+            case STUN -> {
+                headX = x + M.sin(yaw) * 2;
+                headZ = z + M.cos(yaw) * 2;
+                headY = base + .8f;
+                if (t > stunTime) {
+                    setState(HIDE);
+                    bits = 0;
+                }
+            }
+            default -> setState(HIDE);
+        }
+    }
+
+    /** Lightning the drake has called down: {x, z, seconds until it lands, flash left}. */
+    final java.util.List<float[]> strikes = new java.util.ArrayList<>();
+
+    /** Where storm-scale i glows: the chest, then each wing root. */
+    private boolean drakeScale(int i, float[] out) {
+        float lx = i == 0 ? 0 : i == 1 ? -1.4f : 1.4f, ly = i == 0 ? -.6f : .55f, lz = i == 0 ? 1.3f : .3f, c = M.cos(yaw), n = M.sin(yaw);
+        return put(out, x + (lx * c + lz * n) * 2, y + ly * 2, z + (-lx * n + lz * c) * 2);
+    }
+
+    /** The Stormdrake circles the mountain far above, comes down on anyone who strays close, and strafes them with lightning. */
+    private void drake(float dt, Game g, float d, float face) {
+        Hero h = g.hero;
+        boolean second = hp <= maxHp / 2;
+        for (int i = strikes.size() - 1; i >= 0; i--) {
+            float[] s = strikes.get(i);
+            float gy = g.world.height(s[0], s[1]);
+            if (s[2] > 0 && (s[2] -= dt) <= 0) {
+                s[3] = .3f;
+                g.sparks(s[0], gy + .3f, s[1], 0xd8f0ff, 16);
+                g.sfx(Audio.THUNDER);
+                if (M.dist(h.x, h.z, s[0], s[1]) < 2.4f && Math.abs(h.y - gy) < 3) g.hurtHero(3, s[0], s[1], false);
+            } else if (s[2] <= 0 && (s[3] -= dt) <= 0) strikes.remove(i);
+        }
+        headX = x + M.sin(yaw) * 4.6f;
+        headZ = z + M.cos(yaw) * 4.6f;
+        headY = y + (state == STUN ? .2f : 1.8f);
+        if (state != IDLE && state != STUN && (g.dungeon != null || h.st == Hero.State.DEAD || M.dist(h.x, h.z, x, z) > 240)) {
+            calm(g);
+            return;
+        }
+        switch (state) {
+            case IDLE -> {
+                float a = g.time * .1f;
+                x = M.approach(x, World.MID + M.sin(a) * 220, .4f, dt);
+                z = M.approach(z, World.MID + M.cos(a) * 220, .4f, dt);
+                y = M.approach(y, 240, .4f, dt);
+                yaw = M.turn(yaw, a + M.PI / 2, dt);
+                if (g.dungeon == null && g.boss == null && g.screen == Game.Screen.PLAY && h.st != Hero.State.DEAD && M.dist(h.x, h.z, x, z) < 150) {
+                    g.boss = this;
+                    setState(CHASE);
+                    g.audio.music(Audio.BOSS);
+                    g.say("THE STORMDRAKE, Rider of the Squall");
+                    g.messageT = 4;
+                }
+            }
+            case CHASE -> {
+                float a = g.time * (second ? .55f : .42f), gx = h.x + M.sin(a) * 17, gz = h.z + M.cos(a) * 17;
+                float gy = Math.max(g.world.height(gx, gz), Math.max(h.y, World.WATER)) + 12;
+                x = M.approach(x, gx, 1.2f, dt);
+                y = M.approach(y, gy, 1.2f, dt);
+                z = M.approach(z, gz, 1.2f, dt);
+                yaw = M.turn(yaw, a + M.PI / 2, 2 * dt);
+                if (t > (second ? 3.5f : 5)) setState(WINDUP);
+            }
+            case WINDUP -> {
+                y += 2 * dt;
+                yaw = M.turn(yaw, face, 3 * dt);
+                if (t > 1.1f) {
+                    setState(ATTACK);
+                    tx = M.sin(yaw);
+                    tz = M.cos(yaw);
+                    g.sfx(Audio.THUNDER);
+                }
+            }
+            case ATTACK -> {
+                // A strafing run straight over the hero, calling lightning down along its path.
+                x += tx * 20 * dt;
+                z += tz * 20 * dt;
+                y = M.approach(y, Math.max(g.world.height(x, z), Math.max(h.y, World.WATER)) + 9, 2, dt);
+                if (cool <= 0) {
+                    cool = second ? .17f : .24f;
+                    strikes.add(new float[]{x + (g.rng.nextFloat() - .5f) * 3, z + (g.rng.nextFloat() - .5f) * 3, .85f, 0});
+                }
+                if (t > 2.4f) setState(CHASE);
+            }
+            case STUN -> {
+                y = M.approach(y, g.world.height(x, z) + 1.6f, 5, dt);
+                if (t > stunTime) {
+                    setState(CHASE);
+                    bits = 0;
+                    g.say("The Stormdrake takes to the sky again!");
+                }
+            }
+            default -> setState(IDLE);
+        }
+    }
+
+    /** Breaks off the fight and heals: the drake goes back to circling the mountain. */
+    void calm(Game g) {
+        setState(IDLE);
+        hp = maxHp;
+        bits = 0;
+        strikes.clear();
+        if (g.boss == this) {
+            g.boss = null;
+            g.audio.music(Audio.FIELD);
+        }
+    }
+
+    /** Lightning markers and bolts, drawn even when the drake itself is out of view. */
+    void drawStrikes(Renderer r, Game g) {
+        for (float[] s : strikes) {
+            float gy = g.world.height(s[0], s[1]) + .15f;
+            if (s[2] > 0) {
+                float rad = .8f + s[2] * 1.8f;
+                for (int k = 0; k < 14; k++) {
+                    float a = k * M.TAU / 14 + g.time * 3;
+                    r.point(s[0] + M.sin(a) * rad, gy, s[1] + M.cos(a) * rad, .11f, 0xbfe8ff, 220);
+                }
+            } else {
+                int col = 0xeaf6ff | Mesh.GLOW;
+                r.worldTri(s[0] - .25f, gy, s[1], s[0] + .25f, gy, s[1], s[0], gy + 40, s[1], col, true, 230);
+                r.worldTri(s[0], gy, s[1] - .25f, s[0], gy, s[1] + .25f, s[0], gy + 40, s[1], col, true, 230);
+                r.point(s[0], gy + .5f, s[1], 1.2f, 0xd8f0ff, 160);
+            }
+        }
+    }
+
     private float aux2() { return stunTime; }
 
     // ---- drawing ------------------------------------------------------------------------------
 
     void draw(Renderer r, Xf xf, float time) {
+        if (state == HIDE && (kind == Kind.STALKER || kind == Kind.ASHMAW)) {
+            // Burrowed: a travelling mound of sand.
+            float s = kind == Kind.ASHMAW ? 2.4f : 1;
+            r.mesh(Models.MOUND, xf.identity().translate(x, y + M.sin(time * 8 + homeX) * .04f, z).rotY(time * 2).scale(s, s * .6f, s));
+            for (int k = 0; k < 4; k++) {
+                float a = time * 3 + k * 1.6f;
+                r.point(x + M.sin(a) * .6f * s, y + .25f + (k % 2) * .15f, z + M.cos(a) * .6f * s, .06f * s, 0xd8b884, 160);
+            }
+            return;
+        }
         if (state == HIDE || state == DEAD && deadT > 1) return;
+        if (riposteT > 0 && state != DEAD) r.point(x, centerY() + radius() + .7f, z, .2f + M.sin(time * 14) * .04f, 0xffd870, 230);
         r.flash = Math.max(flash * .85f, state == DEAD ? deadT : frozenT > 0 ? .55f : 0);
         r.flashCol = frozenT > 0 && flash < .3f ? 0x9fe8ff : 0xffffff;
         float sink = state == DEAD ? deadT * (boss ? 3 : 1) : 0;
@@ -901,6 +1229,70 @@ final class Foe {
                 pose[rig.n * 3] = state == WINDUP ? -.12f : Math.abs(M.sin(p)) * .05f * (run ? 1 : 0);
                 xf.identity().translate(x, y - sink, z).rotY(yaw);
                 rig.draw(r, xf, pose);
+            }
+            case STALKER -> {
+                java.util.Arrays.fill(pose, 0);
+                float rise = state == WINDUP ? M.clamp(t / .5f, 0, 1) : 1;
+                pose[rig.part("tail") * 3] = state == ATTACK ? .9f : state == WINDUP ? -.35f : M.sin(time * 3 + homeX) * .08f;
+                float snap = state == RECOVER ? M.sin(time * 9 + homeZ) * .25f : .1f;
+                pose[rig.part("clawL") * 3 + 1] = snap;
+                pose[rig.part("clawR") * 3 + 1] = -snap;
+                xf.identity().translate(x, y - sink - (1 - rise) * .7f, z).rotY(yaw);
+                rig.draw(r, xf, pose);
+            }
+            case ASHMAW -> {
+                float fx = M.sin(yaw), fz = M.cos(yaw);
+                if (state == WINDUP) {
+                    // Churning sand marks where it will burst.
+                    float k = M.clamp(t / .95f, 0, 1);
+                    for (int i = 0; i < 18; i++) {
+                        float a = i * M.TAU / 18 + time * 2, rr = 2.6f * (1.2f - k * .4f);
+                        r.point(tx + M.sin(a) * rr, homeY + .15f, tz + M.cos(a) * rr, .14f, 0xd8b884, 210);
+                    }
+                    r.mesh(Models.MOUND, xf.identity().translate(x, homeY, z).scale(2.4f, 1.4f, 2.4f));
+                    break;
+                }
+                float pitch = state == STUN ? .15f : state == RECOVER ? -.35f
+                        : -M.atan2(6.5f * M.PI * M.cos(Math.min(1, t / 1.3f) * M.PI), 9);
+                r.mesh(Characters.ASHMAW_HEAD, xf.identity().translate(headX, headY - sink, headZ).rotY(yaw).rotX(pitch));
+                if (state == RECOVER) r.point(headX + fx * .95f, headY - .1f, headZ + fz * .95f, .35f + M.sin(time * 12) * .06f, 0xff8a3a, 230);
+                for (int k = 1; k <= 8; k++) {
+                    float sx, sy, sz;
+                    if (state == ATTACK) {
+                        float s = Math.max(0, Math.min(1, t / 1.3f) - k * .055f);
+                        sx = tx + fx * s * 9;
+                        sz = tz + fz * s * 9;
+                        sy = homeY - 1 + M.sin(s * M.PI) * 6.5f;
+                    } else if (state == STUN || state == DEAD) {
+                        sx = headX - fx * k * 1.1f;
+                        sz = headZ - fz * k * 1.1f;
+                        sy = homeY + .55f;
+                    } else {
+                        sx = x - fx * k * .3f;
+                        sz = z - fz * k * .3f;
+                        sy = headY - k * .75f;
+                    }
+                    if (sy < homeY - 1.2f) continue;
+                    r.mesh(Characters.ASHMAW_SEG, xf.identity().translate(sx, sy - sink, sz).rotY(yaw).scale(1 - k * .05f));
+                }
+            }
+            case STORMDRAKE -> {
+                java.util.Arrays.fill(pose, 0);
+                boolean grounded = state == STUN || state == DEAD;
+                float flap = grounded ? 0 : M.sin(time * (state == ATTACK ? 3.5f : 2.2f)) * .55f, fold = grounded ? 1 : 0;
+                pose[rig.part("wingL") * 3 + 2] = flap - fold * .4f;
+                pose[rig.part("wingR") * 3 + 2] = -flap + fold * .4f;
+                pose[rig.part("wingL") * 3 + 1] = -fold * .8f;
+                pose[rig.part("wingR") * 3 + 1] = fold * .8f;
+                pose[rig.part("neck") * 3] = grounded ? .35f : state == WINDUP ? -.4f : 0;
+                pose[rig.part("head") * 3] = grounded ? .3f : state == ATTACK ? .35f : -.1f;
+                pose[rig.part("tail") * 3] = M.sin(time * 1.7f) * .15f;
+                pose[rig.part("tail") * 3 + 1] = M.sin(time * 1.1f) * .25f;
+                pose[rig.n * 3 + 1] = state == ATTACK ? .15f : 0;
+                xf.identity().translate(x, y - sink, z).rotY(yaw).scale(2);
+                rig.draw(r, xf, pose);
+                float[] p = new float[3];
+                for (int i = 0; i < 3; i++) if (point(i, p)) r.point(p[0], p[1], p[2], .45f + M.sin(time * 6 + i) * .08f, 0xffe14a, 230);
             }
             case HOARWING -> {
                 java.util.Arrays.fill(pose, 0);

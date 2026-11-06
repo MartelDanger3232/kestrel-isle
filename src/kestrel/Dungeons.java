@@ -139,7 +139,48 @@ final class Dungeons {
             "##################E##################"},
             new String[]{"bigkey", "key", "claw"}, SERPENT, d -> d.rule(() -> !d.flooded, () -> d.openDoor(0)));
 
-    static final int KING = 3, HOARWING = 4;
+    static final int KING = 3, HOARWING = 4, ASHMAW = 5;
+
+    /** The Sunscour Temple: a sandstone ruin where sunbeams bent by mirrors open the way, and the Windcloak crosses its chasm. */
+    static final Spec SUNSCOUR = new Spec("Sunscour Temple", "Sun Relic", 0xc8a46a, 0xa8844a, 0xd8b884, 0x1a120a, false,
+            Models.stone(0xffc84a), new String[]{
+            "#####################################",
+            "##########.................##########",
+            "##########........w........##########",
+            "##########..#...........#..##########",
+            "##########.................##########",
+            "##########........M........##########",
+            "##########.................##########",
+            "##########..#...........#..##########",
+            "##########.................##########",
+            "##########.................##########",
+            "##################B##################",
+            "##########.................##########",
+            "##########.................##########",
+            "##########.................##########",
+            "##########.................##########",
+            "##########                 ##########",
+            "#........#                 #........#",
+            "#.CQ..r..#                 #.s......#",
+            "#........#                 #......s.#",
+            "#.....s..#....V.......V....#........#",
+            "#Y....q..#.................#..s.....#",
+            "#........#.....s.....s.....#........#",
+            "#........D.................D........#",
+            "#........#.................#.....C..#",
+            "#........#.................#........#",
+            "##################S##################",
+            "#############....Q......#############",
+            "#############....r.....Y#############",
+            "#############...........#############",
+            "#############..R........#############",
+            "#############.....@.....#############",
+            "##################E##################"},
+            new String[]{"windcloak", "bigkey"}, ASHMAW, d -> {
+        d.rule(() -> d.sunlit(1), () -> d.openDoor(0));
+        d.rule(() -> d.sunlit(0), () -> d.reveal(0));
+        d.rule(() -> d.cleared(28, 16, 35, 24), () -> d.reveal(1));
+    });
 
     /** Rimeholt: an ice vault in the northern peaks. Fire melts its ice, its floors are slick, and the claw crosses its chasms. */
     static final Spec RIMEHOLT = new Spec("Rimeholt", "Wardstone of Frost", 0x8aa4b4, 0x6a8494, 0x9ec4d6, 0x0a1218, false,
@@ -168,7 +209,7 @@ final class Dungeons {
             "#...C....#....g.......g....#-------p#",
             "#........D-----------------D--C----##",
             "#........#-----------------#--------#",
-            "#........#.................#--------#",
+            "#c.......#.................#--------#",
             "##################I##################",
             "#############...........#############",
             "#############.T.......T.#############",
@@ -176,7 +217,7 @@ final class Dungeons {
             "#############..R........#############",
             "#############.....@.....#############",
             "##################E##################"},
-            new String[]{"longclaw", "bigkey", "key"}, HOARWING, d -> {
+            new String[]{"longclaw", "bigkey", "key", "ore"}, HOARWING, d -> {
         d.rule(() -> d.cleared(1, 16, 8, 24), () -> d.reveal(1));
         d.rule(() -> d.plate(0), () -> d.reveal(2));
     });
@@ -199,7 +240,7 @@ final class Dungeons {
             new String[0], KING, d -> {});
 
     /** Dungeon index 3 is the final Hollow Crown; Rimeholt was added later as index 4. */
-    static final Spec[] ALL = {ROOTDEEP, CINDER, TIDEWELL, CROWN, RIMEHOLT};
+    static final Spec[] ALL = {ROOTDEEP, CINDER, TIDEWELL, CROWN, RIMEHOLT, SUNSCOUR};
 
     /** The Wardstone bit a dungeon grants (the Crown grants none). */
     static int stoneBit(int k) { return k == 4 ? 8 : k < 3 ? 1 << k : 0; }

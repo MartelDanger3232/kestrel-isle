@@ -4,7 +4,7 @@ import java.awt.event.KeyEvent;
 
 /** The hero: movement, lock-on combat, shield, items and every animation state. */
 final class Hero {
-    enum State { MOVE, AIR, ROLL, HOP, FLIP, ATTACK, CHARGE, SPIN, HURT, LEDGE, CLIMB, SWIM, AIM, HOLD, THROW, FLUTE, POSE, DEAD, CAST, DRINK, RIDE, LOOSE }
+    enum State { MOVE, AIR, ROLL, HOP, FLIP, ATTACK, CHARGE, SPIN, HURT, LEDGE, CLIMB, SWIM, AIM, HOLD, THROW, FLUTE, POSE, DEAD, CAST, DRINK, RIDE, LOOSE, GLIDE }
 
     static final float RADIUS = .35f, GRAVITY = 26;
     private static final Rig R = Characters.HERO;
@@ -13,6 +13,8 @@ final class Hero {
     float x, y, z, vx, vy, vz, yaw, stT, invuln, swordOutT, runAmt, phase, capeA, capeV, holdT, chargeT;
     float stamina = 80, maxStamina = 80, fp = 40, maxFp = 40, castAt;
     private float stamDelay, haulT;
+    /** How long the shield has been up: a guard raised just before a blow lands is a parry. */
+    private float guardT;
     private boolean drank;
     float safeX, safeY, safeZ, pushT, ledgeY, ledgeT;
     int hp = 12, maxHp = 12, combo;
@@ -45,7 +47,7 @@ final class Hero {
 
     boolean busy() { return st == State.POSE || st == State.FLUTE || st == State.DEAD; }
 
-    boolean onGround() { return st != State.AIR && st != State.HOP && st != State.FLIP && st != State.SWIM; }
+    boolean onGround() { return st != State.AIR && st != State.HOP && st != State.FLIP && st != State.SWIM && st != State.GLIDE; }
 
     void setState(State s) {
         st = s;
@@ -131,6 +133,7 @@ final class Hero {
         switch (st) {
             case MOVE -> move(dt, g, ix, iz, mx, mz);
             case AIR -> air(dt, g, ix, iz);
+            case GLIDE -> glide(dt, g, ix, iz);
             case ROLL -> {
                 float k = 1 - M.clamp(stT / .45f, 0, 1) * .5f;
                 step(L, hopX * 9 * k * dt, hopZ * 9 * k * dt);
@@ -254,6 +257,7 @@ final class Hero {
         Level L = g.level;
         Input in = g.in;
         blocking = (in.down(KeyEvent.VK_K) || in.down(Input.MOUSE_R)) && g.gear.shield;
+        guardT = blocking ? guardT + dt : 0;
         if (blocking) swordOutT = 4;
         float speed = blocking ? 1.6f : locked ? 4.2f : 6;
         boolean ice = L.icy(x, z);
@@ -301,6 +305,16 @@ final class Hero {
                 anim.restart(Characters.H_DRINK, .1f);
             } else g.say("No Ember Draughts left. Rest at a Lantern Shrine to refill them.");
             return;
+        }
+        if (g.gear.windcloak && g.updraft(x, y + 1, z) > 0) {
+            g.tip("updraft", "Warm air rises here. Press Space to ride it up with the Windcloak.");
+            if (in.pressed(KeyEvent.VK_SPACE)) {
+                vy = 9;
+                fallFrom = y;
+                setState(State.GLIDE);
+                g.sfx(Audio.GUST);
+                return;
+            }
         }
         if (in.pressed(KeyEvent.VK_SPACE) && spend(locked && Math.abs(mx) > .5f ? 14 : locked && mz < -.5f ? 16 : 18)) {
             if (locked && Math.abs(mx) > .5f) {
@@ -382,6 +396,13 @@ final class Hero {
     }
 
     private void air(float dt, Game g, float ix, float iz) {
+        if (g.gear.windcloak && g.in.pressed(KeyEvent.VK_SPACE) && y - g.level.floor(x, z) > 1.1f && stamina > 4) {
+            setState(State.GLIDE);
+            g.sfx(Audio.GUST);
+            return;
+        }
+        if (g.gear.windcloak && vy < -6 && y - g.level.floor(x, z) > 4)
+            g.tip("glide", "Falling! Press Space to open the Windcloak and glide. Steer with the movement keys; Space again folds it. Warm air over fires and vents lifts you.");
         vy = Math.max(vy - GRAVITY * dt, -40);
         if (moving) {
             vx = M.approach(vx, ix * 5, 2, dt);
@@ -400,6 +421,37 @@ final class Hero {
             float drop = fallFrom - y;
             setState(State.MOVE);
             if (drop > 9) g.hurtHero(Math.min(8, (int) ((drop - 9) / 2) + 2), x, z);
+        }
+    }
+
+    /** Under the Windcloak: drift down slowly, steer with the movement keys, and ride warm air upwards. */
+    private void glide(float dt, Game g, float ix, float iz) {
+        Level L = g.level;
+        float lift = g.updraft(x, y, z), speed = g.gear.stormcloak ? 13 : 9;
+        if (moving) yaw = M.turn(yaw, M.atan2(ix, iz), 2.6f * dt);
+        // In rising air you hover while you're not steering; elsewhere the cloak always carries you forward.
+        float ahead = lift > 0 && !moving ? 0 : speed;
+        vx = M.approach(vx, M.sin(yaw) * ahead, 1.6f, dt);
+        vz = M.approach(vz, M.cos(yaw) * ahead, 1.6f, dt);
+        vy = M.approach(vy, lift > 0 ? 9 : -2.3f, lift > 0 ? 2.5f : 3, dt);
+        if (lift <= 0 && !g.gear.stormcloak) {
+            stamina -= 6 * dt;
+            stamDelay = .6f;
+        }
+        fallFrom = y;
+        y += vy * dt;
+        step(L, vx * dt, vz * dt);
+        phase += dt * 2;
+        float f = L.floor(x, z), w = L.water(x, z);
+        if (!Float.isNaN(w) && y < w - .2f && f < w - 1) {
+            setState(State.SWIM);
+            g.splash(x, w, z);
+        } else if (y <= f) {
+            y = f;
+            setState(State.MOVE);
+        } else if (g.in.pressed(KeyEvent.VK_SPACE) || stamina <= 0) {
+            if (stamina <= 0) g.say("Out of stamina: the Windcloak folds!");
+            setState(State.AIR);
         }
     }
 
@@ -474,7 +526,7 @@ final class Hero {
     /** Moves with wall sliding; false if anything blocked the way. */
     private boolean step(Level L, float dx, float dz) {
         boolean free = true;
-        float lim = st == State.AIR || st == State.HOP || st == State.FLIP ? .05f : L.maxStep();
+        float lim = st == State.AIR || st == State.GLIDE || st == State.HOP || st == State.FLIP ? .05f : L.maxStep();
         if (dx != 0) {
             float px = x + dx + Math.signum(dx) * RADIUS;
             if (L.floor(px, z - RADIUS * .7f) <= y + lim && L.floor(px, z + RADIUS * .7f) <= y + lim) x += dx;
@@ -514,11 +566,18 @@ final class Hero {
     boolean hit(Game g, int dmg, float fromX, float fromZ, boolean blockable) {
         if (invuln > 0 || st == State.DEAD) return false;
         float dx = x - fromX, dz = z - fromZ, d = Math.max(.01f, M.hypot(dx, dz));
-        if (blockable && blocking && Math.abs(M.angleDiff(yaw, M.atan2(-dx, -dz))) < 1.2f && (stamina -= dmg * 7) > 0) {
+        boolean facing = blockable && blocking && Math.abs(M.angleDiff(yaw, M.atan2(-dx, -dz))) < 1.2f;
+        if (facing && guardT < .25f) {
+            // A guard raised just as the blow lands turns it aside for free and leaves the attacker reeling.
+            g.parried(fromX, fromZ);
+            return false;
+        }
+        if (facing && (stamina -= dmg * 7) > 0) {
             stamDelay = .8f;
             step(g.level, dx / d * .4f, dz / d * .4f);
             g.sfx(Audio.CLANG);
             g.sparks(x + M.sin(yaw) * .6f, y + 1.1f, z + M.cos(yaw) * .6f, 0xfff0c0, 8);
+            g.tip("parry", "Blocked! Raise your shield just as a blow lands to PARRY: it costs nothing, the foe reels, and your next sword strike is a riposte for triple damage.");
             return false;
         }
         hp -= dmg;
@@ -551,6 +610,7 @@ final class Hero {
         switch (st) {
             case MOVE -> anim.play(blocking ? Characters.H_BLOCK : null, .12f);
             case AIR -> anim.play(Characters.H_AIR, .15f);
+            case GLIDE -> anim.play(Characters.H_GLIDE, .2f);
             case CLIMB -> anim.play(Characters.H_CLIMB, .15f);
             case SWIM -> anim.play(Characters.H_SWIM, .2f);
             case AIM -> {

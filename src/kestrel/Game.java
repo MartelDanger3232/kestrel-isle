@@ -15,7 +15,7 @@ final class Game {
     static final long SEED_WORLD = 1337;
 
     static final class Gear {
-        boolean sword, shield, flute, bow, bombBag, claw, ascended, bowOut, frostbrand, longclaw;
+        boolean sword, shield, flute, bow, bombBag, claw, ascended, bowOut, frostbrand, longclaw, windcloak, stormcloak, sunRelic;
         /** Side quests: two bits each (0 unknown, 1 asked, 2 item in hand, 3 done); wolves counts Hessa's hunt. */
         int quests, wolves;
         int arrows, bombs, gleams, pieces, songs, stones, item;
@@ -58,6 +58,8 @@ final class Game {
     final Magic magic;
     final Horse horse = new Horse();
     final Life life;
+    /** The Stormdrake, once it takes to the skies. */
+    Foe drake;
     final Random rng = new Random(9);
     final List<Foe> foes = new ArrayList<>();
     final List<Shot> shots = new ArrayList<>();
@@ -65,7 +67,7 @@ final class Game {
     final List<Spark> sparks = new ArrayList<>();
     final List<Drop> drops = new ArrayList<>();
     final List<float[]> waves = new ArrayList<>();
-    final Dungeon[] dungeons = new Dungeon[5];
+    final Dungeon[] dungeons = new Dungeon[6];
     Level level;
     Dungeon dungeon;
     int dungeonIndex = -1;
@@ -302,7 +304,15 @@ final class Game {
 
     float swordMult() { return (1 + .12f * gear.str) * (1 + .3f * gear.swordLv) * (gear.ascended ? 1.5f : 1); }
 
-    float spellMult() { return (1 + .15f * gear.arc) * (gear.ascended ? 1.5f : 1); }
+    float spellMult() { return (1 + .15f * gear.arc) * (gear.ascended ? 1.5f : 1) * (gear.sunRelic ? 1.25f : 1); }
+
+    /** Whether warm air rises at (x, y, z): over campfires and desert vents outside, over vents in dungeons. */
+    float updraft(float x, float y, float z) {
+        if (dungeon != null) return dungeon.updraft(x, y, z);
+        for (float[] f : world.places.fires) if (M.dist(x, z, f[0], f[2]) < 1.9f && y > f[1] - 1 && y < f[1] + 22) return 1;
+        for (float[] v : world.places.vents) if (M.dist(x, z, v[0], v[2]) < 2.6f && y > v[1] - 1 && y < v[1] + 62) return 1;
+        return 0;
+    }
 
     /** Applies levels and heart containers to the hero's maximums. */
     void refreshStats() {
@@ -658,6 +668,24 @@ final class Game {
             s.vz = dz / l * speed;
         }
         shots.add(s);
+    }
+
+    /** A perfect guard: a burst of sparks, and the attacker nearest the blow reels open for a riposte. */
+    void parried(float fromX, float fromZ) {
+        Foe best = null;
+        float bd = 3.5f;
+        for (Foe f : foes) {
+            float d = M.dist(f.x, f.z, fromX, fromZ);
+            if (f.alive() && d < bd) {
+                bd = d;
+                best = f;
+            }
+        }
+        if (best != null) best.stagger();
+        audio.sfx(Audio.PARRY);
+        sparks(hero.x + M.sin(hero.yaw) * .6f, hero.y + 1.1f, hero.z + M.cos(hero.yaw) * .6f, 0xffe9a0, 24);
+        shake(.25f);
+        say("Parry!");
     }
 
     void shockwave(float x, float z) { waves.add(new float[]{x, z, 1, 0}); }

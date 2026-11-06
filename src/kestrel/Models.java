@@ -125,6 +125,30 @@ final class Models {
     static final Mesh ICE_GATE = m().vary(.05f).prism(-3.3f, 0, 0, 1.2f, .45f, 8, 6, 0xa8d4e8, .15f).prism(3.3f, 0, 0, 1.2f, .45f, 8.6f, 6, 0xa8d4e8, .15f)
             .box(0, 7, 0, 4.5f, .8f, 1.2f, 0x8ab4c8).prism(0, 7.8f, 0, .8f, 0, 2.6f, 5, 0xd8f4ff | Mesh.GLOW).box(0, 2.6f, -.3f, 2, 2.6f, .3f, DARK)
             .prism(-4.8f, 0, 1.4f, .9f, 0, 3.4f, 5, 0xc4e6f2).prism(4.6f, 0, -1.2f, .8f, 0, 2.6f, 5, 0xc4e6f2).prism(5.6f, 0, 1, .6f, 0, 1.8f, 5, 0xd8f4ff);
+    static final Mesh SUN_GATE = m().vary(.05f).prism(-3.4f, 0, 0, 1.3f, .8f, 7.5f, 4, 0xc8a46a).prism(3.4f, 0, 0, 1.3f, .8f, 7.5f, 4, 0xc8a46a)
+            .box(0, 7.6f, 0, 4.8f, .6f, 1.4f, 0xb08a52).box(0, 2.7f, -.3f, 2.1f, 2.7f, .3f, DARK).prism(0, 8.2f, 0, .5f, .4f, .6f, 6, 0xb08a52)
+            .blob(0, 9.7f, 0, 1.5f, 1.5f, .35f, 2, 12, 0xffc84a | Mesh.GLOW, 0)
+            .prism(-5.4f, 0, 1.5f, .8f, 0, 1.6f, 5, 0xd8b884).prism(5.2f, 0, -1, .7f, 0, 1.2f, 5, 0xd8b884);
+    static final Mesh MIRROR_BASE = m().vary(.05f).prism(0, 0, 0, .45f, .38f, .35f, 6, 0xa8844a).prism(0, .35f, 0, .12f, .1f, .55f, 6, 0x8a6a3a);
+    static final Mesh MIRROR = m().box(0, 1.3f, 0, .62f, .48f, .05f, 0xd8a84a).box(0, 1.3f, .055f, .55f, .41f, .01f, 0xfff4d0 | Mesh.GLOW)
+            .box(0, 1.3f, -.055f, .55f, .41f, .01f, 0xfff4d0 | Mesh.GLOW);
+    static final Mesh SUN_PEDESTAL = m().vary(.05f).prism(0, 0, 0, .5f, .4f, .6f, 6, 0xb08a52).prism(0, .6f, 0, .3f, .38f, .2f, 6, 0xc8a46a);
+    static final Mesh SUN_CRYSTAL_ON = m().prism(0, -.35f, 0, 0, .28f, .35f, 6, 0xffd870 | Mesh.GLOW).prism(0, 0, 0, .28f, 0, .4f, 6, 0xffe9a0 | Mesh.GLOW);
+    static final Mesh SUN_CRYSTAL_OFF = m().prism(0, -.35f, 0, 0, .28f, .35f, 6, 0x8a6a3a).prism(0, 0, 0, .28f, 0, .4f, 6, 0x9a7a4a);
+    static final Mesh SUN_DISC = m().vary(.05f).prism(0, 0, 0, .55f, .5f, .5f, 8, 0xb08a52).prism(0, .5f, 0, .5f, .5f, .04f, 12, 0xffe9a0 | Mesh.GLOW);
+    static final Mesh SUN_SHAFT = m().prism(0, .5f, 0, .5f, .7f, 9, 8, 0xfff0b0 | Mesh.GLOW);
+    static final Mesh MOUND = m().blob(0, 0, 0, .6f, .25f, .6f, 2, 8, 0xc8a46a, .15f);
+    static final Mesh WINDCLOAK = cloak(0x3a7a9a, 0x2a5a7a), STORMCLOAK = cloak(0x2a2e52, 0xf2c14e);
+
+    /** The glider: a canopy of sailcloth held above the head on two cords. */
+    private static Mesh cloak(int top, int under) {
+        return m().twoSided().tri(0, 2.8f, .6f, -1.75f, 2.3f, .2f, 0, 2.6f, -.45f, top).tri(0, 2.8f, .6f, 0, 2.6f, -.45f, 1.75f, 2.3f, .2f, top)
+                .tri(-1.75f, 2.3f, .2f, -1.1f, 2.1f, -.4f, 0, 2.6f, -.45f, under).tri(1.75f, 2.3f, .2f, 0, 2.6f, -.45f, 1.1f, 2.1f, -.4f, under)
+                .segment(-.22f, 1.6f, .05f, -1.5f, 2.32f, .15f, .01f, .01f, 3, 0xd8d0c0).segment(.22f, 1.6f, .05f, 1.5f, 2.32f, .15f, .01f, .01f, 3, 0xd8d0c0);
+    }
+
+    static final Mesh VENT = m().vary(.08f).prism(0, -.1f, 0, 1.9f, 1.2f, .25f, 7, 0x8a6a4a).prism(0, .1f, 0, .9f, .7f, .06f, 7, 0x2a1a10)
+            .prism(1.6f, 0, .6f, .45f, 0, .5f, 4, 0xa8845a).prism(-1.4f, 0, -.9f, .4f, 0, .45f, 4, 0xa8845a);
     static final Mesh TENT = m().vary(.06f).prism(0, 0, 0, 2.2f, 0, 2.6f, 4, 0x8a6a4a).box(0, 2.55f, 0, .05f, .25f, .05f, WOOD)
             .twoSided().tri(-.5f, .01f, 1.58f, .5f, .01f, 1.58f, 0, 1.25f, .84f, DARK);
     static final Mesh KITE = m().twoSided().tri(0, .8f, 0, .5f, .05f, 0, 0, -.6f, 0, 0xe0503a).tri(0, .8f, 0, 0, -.6f, 0, -.5f, .05f, 0, 0xf2c14e)

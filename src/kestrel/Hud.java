@@ -409,7 +409,7 @@ final class Hud {
             text(mid, own[i] ? ITEMS[i] : "???", ix + 12 * s, iy + 28 * s, own[i] ? INK : DIM);
             if (own[i] && ammo[i] >= 0) text(small, "x" + ammo[i], ix + 12 * s, iy + 50 * s, DIM);
         }
-        text(small, "A/D: choose the tool F uses  (Q swaps sword and bow)", x + 24 * s, y + 160 * s, DIM);
+        text(small, "A/D: choose the tool F uses  (Q swaps sword and bow)" + (gear.windcloak ? "   ·   Windcloak: Space in mid-air" : ""), x + 24 * s, y + 160 * s, DIM);
         text(mid, "Songs", x + 24 * s, y + 200 * s, GOLD);
         float ly = y + 228 * s;
         for (int k = 0; k < Story.SONGS.length; k++) {
@@ -429,16 +429,18 @@ final class Hud {
         text(small, "Heart pieces " + gear.pieces % 4 + "/4   ·   Gleams " + gear.gleams, x + 24 * s, y + 420 * s, DIM);
         text(mid, "Requests", x + 540 * s, y + 200 * s, QUEST);
         float qy = y + 228 * s;
-        boolean any = false;
+        int done = 0, open = 0;
         for (int q = 0; q < Story.QUESTS.length; q++) {
             int st = g.story.quest(q);
-            if (st == 0) continue;
-            any = true;
-            text(small, (st == 3 ? "done  " : "") + Story.QUESTS[q], x + 540 * s, qy, st == 3 ? DIM : INK);
-            if (st != 3) for (String line : wrap(st == 2 ? Story.QUEST_BACK[q] : Story.QUEST_HOW[q], 270 * s)) text(small, line, x + 552 * s, qy += 18 * s, DIM);
+            if (st == 3) done++;
+            if (st != 1 && st != 2) continue;
+            open++;
+            text(small, Story.QUESTS[q], x + 540 * s, qy, INK);
+            for (String line : wrap(st == 2 ? Story.QUEST_BACK[q] : Story.QUEST_HOW[q], 270 * s)) text(small, line, x + 552 * s, qy += 18 * s, DIM);
             qy += 24 * s;
         }
-        if (!any) text(small, "Talk to people. Some of them need help.", x + 540 * s, qy, DIM);
+        if (open == 0) text(small, done > 0 ? "Nothing open right now." : "Talk to people. Some of them need help.", x + 540 * s, qy, DIM);
+        if (done > 0) text(small, "Completed: " + done + " of " + Story.QUESTS.length, x + 540 * s, y + 448 * s, DIM);
         text(small, "Tab to close", x + pw - 120 * s, y + ph - 18 * s, DIM);
     }
 
@@ -449,9 +451,10 @@ final class Hud {
         g2.drawImage(g.world.mapImage, (int) x, (int) y, (int) size, (int) size, null);
         Places pl = g.world.places;
         mark(x, y, size, pl.villageX, pl.villageZ, "Brindle", INK);
-        String[] names = {"Rootdeep Hollow", "Cinder Forge", "Tidewell Vault", "Hollow Crown", "Old altar", "Rimeholt"};
+        String[] names = {"Rootdeep Hollow", "Cinder Forge", "Tidewell Vault", "Hollow Crown", "Old altar", "Rimeholt", "Sunscour Temple"};
         for (Places.Gate gt : pl.gates) mark(x, y, size, gt.x, gt.z, names[gt.kind], gt.kind == Places.CROWN ? new Color(180, 120, 255) : GOLD);
         mark(x, y, size, pl.outpostX, pl.outpostZ, "Rangers' outpost", INK);
+        mark(x, y, size, pl.campX, pl.campZ, "Nomad camp", INK);
         float px = x + g.hero.x / World.EXTENT * size, py = y + (1 - g.hero.z / World.EXTENT) * size, fx = M.sin(g.hero.yaw), fy = -M.cos(g.hero.yaw), k = 11 * s;
         Polygon arrow = new Polygon();
         arrow.addPoint((int) (px + fx * k), (int) (py + fy * k));

@@ -23,15 +23,19 @@ final class Story {
             "Cinder Golem: roll out of the way when it raises its fist. When the fist sticks in the floor glowing, light a bomb (X to pick bombs, F) and throw it (F) right beside the fist. The armour cracks: strike the glowing core while it kneels. Roll through its shockwave rings. Out of bombs? The glowing orange Blast Pods in the corners regrow.",
             "Tide Serpent: when its head crashes down and rests on the floor, fire the Grapple Claw at its mask to tear it free.",
             "Hollow King: lock on (Shift) to its glowing lantern-heart and shoot it to bring it down. When it rises high and shines, drag it down with the claw.",
-            "Hoarwing: it circles high, dives at you (roll aside) and rains icicles (keep moving). When it lands on a perch post and its eyes glow, fire the claw at it (X picks the claw, hold F, let go) to drag it onto the ice, then strike while it's down."};
+            "Hoarwing: it circles high, dives at you (roll aside) and rains icicles (keep moving). When it lands on a perch post and its eyes glow, fire the claw at it (X picks the claw, hold F, let go) to drag it onto the ice, then strike while it's down.",
+            "Ashmaw: it swims under the sand and bursts up where you stand: keep moving when the sand churns. When it surfaces to roar, its glowing maw is open: lock on (Shift) and shoot it with an arrow or Ember Bolt. It crashes down: strike its head.",
+            "Stormdrake: it strafes you with lightning (glowing rings mark where bolts will land: get out of them). Lock on (Shift) to its three glowing storm-scales and shoot each with arrows or Ember Bolts. When all three go dark it crashes: strike its head."};
     /** Side quests, in the order of their two-bit slots in Gear.quests. */
-    static final String[] QUESTS = {"Tibb's kite", "Ansel's lost rod", "Oskar's rime ore", "Hessa's wolf hunt"};
+    static final String[] QUESTS = {"Tibb's kite", "Ansel's lost rod", "Oskar's rime ore", "Hessa's wolf hunt", "The Sunscour Temple", "The Stormdrake"};
     static final String[] QUEST_HOW = {"Caught high in the great oak west of Brindle. Only a claw could reach it.",
             "Dropped atop a rock spire west of the rangers' outpost. Grapple the post on top.",
             "Rime ore glitters somewhere inside Rimeholt. Bring it to Oskar's forge.",
-            "Hunt 6 Frostfang wolves in the snowfields, then report to Hessa."};
+            "Hunt 6 Frostfang wolves in the snowfields, then report to Hessa.",
+            "Brave the Sunscour Temple south-east of Sela's camp: bend its sunbeams, claim Wren's Windcloak, and end Ashmaw.",
+            "The Stormdrake circles the mountain. Get close, darken its three storm-scales with arrows or Ember Bolts, then strike its head."};
     static final String[] QUEST_BACK = {"Take the kite back to Tibb in Brindle.", "Take the rod back to Ansel in Brindle.",
-            "Take the ore to Oskar the smith in Brindle.", "Report to Hessa at the outpost."};
+            "Take the ore to Oskar the smith in Brindle.", "Report to Hessa at the outpost.", "Tell Sela at the nomad camp.", "Tell Sela at the nomad camp."};
     /** Where you wake after falling: {dungeon index or -1, x, y, z}. */
     float[] respawn;
     private float bossClock;
@@ -107,6 +111,7 @@ final class Story {
                 case Places.CROWN -> g.offer(d, g.gear.stones == 15 ? "Descend into the Hollow Crown" : "Shadow seals the way (Wardstones " + Integer.bitCount(g.gear.stones) + "/4)",
                         g.gear.stones == 15 ? () -> enterDungeon(3) : null);
                 case Places.FROST -> g.offer(d, "Enter Rimeholt", () -> enterDungeon(4));
+                case Places.SAND -> g.offer(d, "Enter the Sunscour Temple", () -> enterDungeon(5));
                 default -> {
                     boolean clear = pl.boulders.get(1)[3] == 0;
                     g.offer(d, clear ? "Touch the old altar" : "Rubble buries something here.", clear ? this::altar : null);
@@ -122,6 +127,7 @@ final class Story {
             case "smith" -> "Oskar";
             case "child" -> "Tibb";
             case "ranger" -> "Hessa";
+            case "nomad" -> "Sela";
             default -> "Ansel";
         };
     }
@@ -161,6 +167,7 @@ final class Story {
                 }
             }
             case "ranger" -> hessa();
+            case "nomad" -> sela();
             default -> {
                 if (quest(1) == 2) g.talk("Ansel", () -> {
                     setQuest(1, 3);
@@ -202,6 +209,68 @@ final class Story {
                 "The thing beneath the Crown wears Corvin's face. Whatever it says to you down there, remember: he asked to be stopped.",
                 "Go, Keeper. Bring the island its morning back.");
         else g.talk("Elder Maren", null, "The lighthouse is burning again. I keep walking past it just to look.", "Corvin is at rest now. You did that.");
+    }
+
+    /** Sela, a sand-reader of the Sunscour nomads: the temple, Wren's Windcloak, and the drake in the storm. */
+    private void sela() {
+        Game.Gear gear = g.gear;
+        if (quest(4) == 0) {
+            setQuest(4, 1);
+            g.talk("Sela", this::save, "A traveller! Sit, share the shade. We nomads read the sand, and lately the sand has been restless.",
+                    "South-east stands the Sunscour Temple. Something vast swims beneath its floors: Ashmaw, the sand wyrm. It has swallowed two of our camels already.",
+                    "Long ago a Keeper named Wren hid a cloak of wind in that temple. With it she rode the hot air off our vents like a hawk. If anyone can claim it, it's her blood.",
+                    "The temple's doors answer to sunlight. Bend the beams with its mirrors: stand beside one and turn it.");
+        } else if (quest(4) == 1) g.talk("Sela", null, gear.windcloak
+                ? "Wren's cloak! The vents at the feet of the mesas will lift you higher than the hawks. Old offerings wait up top. But Ashmaw still lives."
+                : "The Sunscour Temple lies south-east. Bend the sunbeams with the mirrors, and mind the ripples in the sand.");
+        else if (quest(4) == 2) g.talk("Sela", () -> {
+                    setQuest(4, 3);
+                    setQuest(5, 1);
+                    gear.gleams += 600;
+                    g.say("+600 gleams");
+                    save();
+                }, "Ashmaw is gone? The sand is quiet for the first time in a season. Take this, from all of us.",
+                "But listen. When storms roll over the mountain, a drake rides them: the Stormdrake. It hunts anything that flies, and now you fly.",
+                "Its scales hold the lightning. Darken all three that glow, and it will fall. Then go for its head.");
+        else if (quest(5) == 2) g.talk("Sela", () -> {
+            setQuest(5, 3);
+            collect(Places.PIECE, "sela-reward");
+        }, "You brought down the Stormdrake! The sand-readers will sing of this for a hundred years.", "Here. My mother found this in the dunes. It's warm, like a heartbeat.");
+        else g.talk("Sela", null, quest(5) == 1 ? "The Stormdrake circles the mountain. Get close and it will come down to you." : "The winds are kind today, Keeper.");
+    }
+
+    /** Once the Windcloak is found, the Stormdrake rides the skies over the mountain until it's brought down. */
+    private void drakeEvents() {
+        if (!g.gear.windcloak || flags.contains("drake")) return;
+        if (g.dungeon != null) {
+            if (g.drake != null && g.boss == g.drake) g.boss = null;
+            return;
+        }
+        if (g.drake == null) g.drake = new Foe(Foe.Kind.STORMDRAKE, World.MID + 220, 240, World.MID);
+        if (!g.foes.contains(g.drake)) {
+            g.drake.calm(g);
+            g.foes.add(g.drake);
+        }
+    }
+
+    private void drakeDefeated() {
+        Game.Gear gear = g.gear;
+        flags.add("drake");
+        g.boss = null;
+        g.drake.strikes.clear();
+        gear.stormcloak = true;
+        gear.hearts++;
+        g.refreshStats();
+        g.hero.hp = g.hero.maxHp;
+        if (quest(5) == 1) setQuest(5, 2);
+        g.itemGet(Models.STORMCLOAK, "Stormcloak", "The drake's storm now lives in your Windcloak: you glide faster, and gliding no longer tires you. Your life grows by one heart.", this::save);
+    }
+
+    /** The Sunscour's prize: a relic of sunlight that makes every spell burn hotter. */
+    private void sunRelic(Dungeon d) {
+        g.gear.sunRelic = true;
+        if (quest(4) == 1) setQuest(4, 2);
+        g.itemGet(d.spec.stone(), "Sun Relic", "The temple's heart burns in your hands. Your spells strike a quarter harder from now on. Sela will want to hear of this.", this::exitDungeon);
     }
 
     /** Hessa, captain of the northern rangers: the way into Rimeholt, and a wolf hunt. */
@@ -420,6 +489,9 @@ final class Story {
 
     void fieldEvents(float dt) {
         tutorials();
+        drakeEvents();
+        if (g.dungeon == null && g.world.biomeAt(g.hero.x, g.hero.z) == World.DESERT)
+            g.tip("desert", "The Sunscour desert. Smoke rises from a nomad camp in the dunes (it's on your map, M): Sela's people know the desert's secrets.");
         if (g.dungeon == null)
             for (float[] p : g.world.places.pods) {
                 if (p[3] == 0 && (p[4] += dt) > 12) {
@@ -445,7 +517,7 @@ final class Story {
         if (g.dungeon != null) return;
         Places pl = g.world.places;
         boolean village = M.dist(g.hero.x, g.hero.z, pl.villageX, pl.villageZ) < 70;
-        g.audio.music(village ? Audio.VILLAGE : g.climate.isNight() ? Audio.NIGHT : Audio.FIELD);
+        g.audio.music(g.boss != null ? Audio.BOSS : village ? Audio.VILLAGE : g.climate.isNight() ? Audio.NIGHT : Audio.FIELD);
     }
 
     // ---- items and pickups --------------------------------------------------------------------
@@ -528,6 +600,10 @@ final class Story {
                 gear.item = 2;
                 g.itemGet(Characters.CLAW, "Longclaw", "Rimeholt's chain nearly doubles your claw's reach (30 m) and reels it in faster. Lock on to yank a foe to you; it tears shields away and fetches things far out of reach.", this::save);
             }
+            case "windcloak" -> {
+                gear.windcloak = true;
+                g.itemGet(Models.WINDCLOAK, "Windcloak", "Wren's glider! While falling, press Space to open it and glide; steer with the movement keys, and Space again folds it. Warm air rising off vents and campfires lifts you (stand in it and press Space). Gliding uses stamina.", this::save);
+            }
             case "ore" -> {
                 if (quest(2) != 3) setQuest(2, 2);
                 g.itemGet(Models.stone(0x9fdcf4), "Rime Ore", "A chunk of glittering blue ore. Oskar the smith would give a lot for this.", this::save);
@@ -565,9 +641,19 @@ final class Story {
                 case 'R' -> {
                     if (dist < 2.4f) g.offer(dist, "Rest at the Lantern Shrine", () -> rest(-1, t.x, t.y, t.z));
                 }
+                case 'r' -> {
+                    if (dist < 2.2f) g.offer(dist, "Turn the mirror", () -> {
+                        t.on = !t.on;
+                        g.sfx(Audio.CLICK);
+                    });
+                }
                 case 'w' -> {
                     if (dist < 2.2f) g.offer(dist, "Take the " + d.spec.stoneName(), () -> {
                         t.gone = true;
+                        if (g.dungeonIndex == 5) {
+                            sunRelic(d);
+                            return;
+                        }
                         g.gear.stones |= Dungeons.stoneBit(g.dungeonIndex);
                         int n = Integer.bitCount(g.gear.stones);
                         Runnable after = n == 4 ? this::ascend : this::exitDungeon;
@@ -629,6 +715,7 @@ final class Story {
                 case GOLEM -> "THE CINDER GOLEM, Keeper of the Forge";
                 case SERPENT -> "THE TIDE SERPENT, Drowned Warden";
                 case HOARWING -> "HOARWING, the Frost That Watches";
+                case ASHMAW -> "ASHMAW, the Sand That Swallows";
                 default -> "THE HOLLOW KING, once Corvin the Keeper";
             });
             g.messageT = 4;
@@ -636,6 +723,10 @@ final class Story {
     }
 
     void bossDefeated(Foe f) {
+        if (f.kind == Foe.Kind.STORMDRAKE) {
+            drakeDefeated();
+            return;
+        }
         Dungeon d = g.dungeon;
         if (d == null) return;
         d.bossDead = true;
@@ -698,10 +789,12 @@ final class Story {
                 case 'm' -> Foe.Kind.SLIME;
                 case 'i' -> Foe.Kind.IMP;
                 case 'W' -> Foe.Kind.WOLF;
+                case 's' -> Foe.Kind.STALKER;
                 default -> Foe.Kind.THORNLING;
             }, s.x, s.y + (s.kind == 'f' ? 2.5f : 0), s.z);
             f.si = s.i;
             f.sj = s.j;
+            if (f.kind == Foe.Kind.STALKER) f.setState(Foe.HIDE);
             g.foes.add(f);
             d.foes.add(f);
         }
@@ -745,7 +838,7 @@ final class Story {
         g.drops.clear();
         g.clawOut = false;
         g.spawnFieldFoes();
-        Places.Gate gate = g.world.places.gates.get(k == 4 ? Places.FROST : Math.max(0, k));
+        Places.Gate gate = g.world.places.gates.get(k == 4 ? Places.FROST : k == 5 ? Places.SAND : Math.max(0, k));
         float x = gate.x, z = gate.z - 8;
         g.hero.place(x, g.world.height(x, z), z);
         g.hero.yaw = g.camYaw = M.PI;
@@ -898,7 +991,7 @@ final class Story {
         return list;
     }
 
-    static final String[] SHRINE_NAMES = {"Brindle", "Rootdeep road", "Forge road", "Tidewell shore", "Below the mountain", "Old altar", "Rimeholt mesa", "Rangers' outpost"};
+    static final String[] SHRINE_NAMES = {"Brindle", "Rootdeep road", "Forge road", "Tidewell shore", "Below the mountain", "Old altar", "Rimeholt mesa", "Rangers' outpost", "Sunscour Temple", "Nomad camp"};
 
     void travelMenu() {
         java.util.List<Integer> spots = travelSpots();
@@ -1013,9 +1106,13 @@ final class Story {
                 gear.songs |= TIDES;
                 g.world.places.gates.get(Places.TIDE).open = true;
             }
-            default -> {
+            case 4 -> {
                 gear.longclaw = gear.frostbrand = true;
                 if (quest(2) == 1) setQuest(2, 2);
+            }
+            default -> {
+                gear.windcloak = gear.sunRelic = true;
+                if (quest(4) <= 1) setQuest(4, 2);
             }
         }
         gear.stones |= Dungeons.stoneBit(k);
@@ -1167,6 +1264,13 @@ final class Story {
             if (j >= 11) return "Wolves on the ice. Let them come to you: they skid past when they miss a lunge.";
             return "The great door needs Rimeholt's Great Key, hidden in the west room.";
         }
+        if (k == 5) {
+            if (j >= 26) return "A shaft of sunlight falls on a polished disc, and a bronze mirror stands in the beam. Stand beside the mirror and press E to turn it, sending the light into the golden crystal by the door.";
+            if (j >= 16 && i <= 8) return "Two mirrors here. Turn each one (E) until the sunbeam bends round into the crystal. Something waits for the light.";
+            if (j >= 16 && i >= 28) return "Dune Stalkers hide under the sand: watch for moving ripples. When one bursts up, block or roll, then strike while it's exposed. A parry (shield up just as it strikes) opens it right up.";
+            if (j >= 15) return !g.gear.windcloak ? "Nobody crosses that chasm on foot. The west room holds something that rides the air." : "Stand on a hot-air vent at the chasm's edge and press Space to rise with the Windcloak, then glide north across.";
+            return d.bigKey ? "The great door opens with the Great Key. Ashmaw waits beyond." : "The Great Key is in the east room, past the Dune Stalkers.";
+        }
         return BOSS_TIPS[3];
     }
 
@@ -1185,7 +1289,7 @@ final class Story {
         Places pl = g.world.places;
         int st = quest(q);
         if (st == 0 || st == 3 || g.dungeon != null) return false;
-        String giver = new String[]{"child", "fisher", "smith", "ranger"}[q];
+        String giver = new String[]{"child", "fisher", "smith", "ranger", "nomad", "nomad"}[q];
         if (st == 2) {
             for (Places.Npc n : pl.npcs) if (n.id().equals(giver)) return put(out, n.x(), n.y() + 2.3f, n.z());
             return false;
@@ -1198,6 +1302,11 @@ final class Story {
             Places.Gate fg = pl.gates.get(Places.FROST);
             return put(out, fg.x, fg.y + 2.5f, fg.z);
         }
+        if (q == 4) {
+            Places.Gate sg = pl.gates.get(Places.SAND);
+            return put(out, sg.x, sg.y + 2.5f, sg.z - 5);
+        }
+        if (q == 5) return g.drake != null && g.drake.alive() ? put(out, g.drake.x, g.drake.y, g.drake.z) : put(out, World.MID, 240, World.MID);
         return q == 3 && put(out, pl.outpostX, g.world.height(pl.outpostX, pl.outpostZ) + 3, pl.outpostZ);
     }
 
@@ -1231,7 +1340,7 @@ final class Story {
         int[] nums = {gr.sword ? 1 : 0, gr.shield ? 1 : 0, gr.flute ? 1 : 0, gr.bow ? 1 : 0, gr.bombBag ? 1 : 0, gr.claw ? 1 : 0,
                 gr.arrows, gr.bombs, gr.gleams, gr.pieces, gr.songs, gr.stones, gr.item, g.hero.maxHp, g.hero.hp,
                 gr.hearts, gr.level, gr.vig, gr.end, gr.mnd, gr.str, gr.arc, gr.swordLv, gr.maxFlasks, gr.spells, gr.spell, gr.ascended ? 1 : 0,
-                gr.frostbrand ? 1 : 0, gr.longclaw ? 1 : 0, gr.quests, gr.wolves};
+                gr.frostbrand ? 1 : 0, gr.longclaw ? 1 : 0, gr.quests, gr.wolves, gr.windcloak ? 1 : 0, gr.stormcloak ? 1 : 0, gr.sunRelic ? 1 : 0};
         StringBuilder sb = new StringBuilder();
         for (int v : nums) sb.append(v).append(',');
         p.setProperty("gear", sb.toString());
@@ -1296,6 +1405,11 @@ final class Story {
                 gr.longclaw = n[28] == 1;
                 gr.quests = n[29];
                 gr.wolves = n[30];
+            }
+            if (n.length >= 34) {
+                gr.windcloak = n[31] == 1;
+                gr.stormcloak = n[32] == 1;
+                gr.sunRelic = n[33] == 1;
             }
         } else gr.hearts = n[13] / 4;
         refill();

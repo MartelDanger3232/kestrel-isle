@@ -12,7 +12,7 @@ import javax.imageio.ImageIO;
 final class Dev {
     private Dev() {}
 
-    private static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night"};
+    private static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night", "glide", "temple", "drake"};
 
     static void shots(File dir) throws Exception {
         Story.saving = false;
@@ -50,7 +50,7 @@ final class Dev {
         g.gear.arrows = 20;
         g.time = 40 + i;
         g.screen = i == 0 ? Game.Screen.TITLE : Game.Screen.PLAY;
-        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f}[i];
+        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f, 16, 12, 15}[i];
         g.climate.update(0);
         switch (i) {
             case 0 -> {}
@@ -166,6 +166,52 @@ final class Dev {
                 h.yaw = g.camYaw = .9f;
                 g.camPitch = -.1f;
                 g.life.stage(h.x, h.z, h.yaw);
+            }
+            case 12 -> {
+                g.story.flags.add("intro");
+                g.gear.windcloak = true;
+                float x = pl.campX + 30, z = pl.campZ + 70;
+                h.place(x, g.world.height(x, z) + 24, z);
+                h.yaw = g.camYaw = .25f;
+                h.setState(Hero.State.GLIDE);
+                h.stamina = h.maxStamina;
+                pump(g, .4f);
+                g.camYaw = h.yaw + .35f;
+                g.camPitch = -.12f;
+            }
+            case 13 -> {
+                g.story.enterDungeon(5);
+                Dungeon d = g.dungeon;
+                g.foes.clear();
+                for (Dungeon.Thing t : d.things) if (t.kind == 'r' && t.j >= 26) t.on = true;
+                h.place(d.cx(20), 0, d.cz(29));
+                h.yaw = g.camYaw = M.atan2(d.cx(17) - h.x, d.cz(26) - h.z) - .15f;
+                g.camPitch = -.28f;
+                pump(g, .4f);
+                g.messageT = 0;
+            }
+            case 14 -> {
+                g.story.flags.add("intro");
+                g.gear.windcloak = true;
+                g.gear.bow = g.gear.bowOut = true;
+                float x = pl.villageX + 90, z = pl.villageZ + 150;
+                float[] p = pl.settle(x, z, 4, .3f);
+                h.place(p[0], g.world.height(p[0], p[1]), p[1]);
+                h.invuln = 99;
+                Foe drake = g.drake = new Foe(Foe.Kind.STORMDRAKE, h.x, h.y, h.z);
+                g.foes.add(drake);
+                drake.x = h.x + 12;
+                drake.z = h.z + 30;
+                drake.y = h.y + 13;
+                g.boss = drake;
+                drake.setState(Foe.ATTACK);
+                drake.yaw = M.atan2(h.x - drake.x, h.z - drake.z);
+                drake.tx = M.sin(drake.yaw);
+                drake.tz = M.cos(drake.yaw);
+                pump(g, .5f);
+                h.yaw = g.camYaw = M.atan2(drake.x - h.x, drake.z - h.z) + .1f;
+                g.camPitch = .3f;
+                g.messageT = 0;
             }
             case 11 -> {
                 g.story.flags.add("intro");
@@ -411,6 +457,145 @@ final class Dev {
         dialogs(g, in);
         check(fetched && g.story.quest(0) == 3 && g.gear.pieces == pieces + 1,
                 "the claw snags Tibb's kite from the oak, and Tibb pays with a heart piece (fetched=" + fetched + ", quest=" + g.story.quest(0) + ")");
+    }
+
+    /** Parry and riposte, the Windcloak and its updrafts, the Sunscour's mirrors and chasm, its stalkers and wyrm, and the Stormdrake. */
+    private static void skyTests(Game g, Input in) {
+        Hero h = g.hero;
+        Places pl = g.world.places;
+        g.screen = Game.Screen.PLAY;
+        g.foes.clear();
+        float fx = pl.villageX + 30, fz = pl.villageZ + 60;
+        h.place(fx, g.world.height(fx, fz), fz);
+        h.invuln = 0;
+        h.hp = h.maxHp;
+        h.yaw = g.camYaw = 0;
+        Foe sentry = new Foe(Foe.Kind.SENTRY, h.x, h.y, h.z + 2);
+        g.foes.add(sentry);
+        in.force(KeyEvent.VK_K, true);
+        run(g, 2 / 60f);
+        int hpBefore = h.hp;
+        g.hurtHero(2, sentry.x, sentry.z, true);
+        boolean parried = h.hp == hpBefore && sentry.state == Foe.STUN && sentry.riposteT > 0;
+        in.force(KeyEvent.VK_K, false);
+        run(g, 1 / 60f);
+        float sHp = sentry.hp;
+        sentry.damage(g, Foe.SWORD, 1, sentry.x, sentry.centerY(), sentry.z);
+        check(parried && sentry.hp == sHp - 3, "a parry staggers the attacker, and the riposte hits for triple (hp " + sHp + " -> " + sentry.hp + ")");
+        g.foes.clear();
+
+        g.gear.windcloak = true;
+        float[] fire = pl.fires.get(1);
+        h.place(fire[0] + .4f, fire[1], fire[2]);
+        h.stamina = h.maxStamina;
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_SPACE);
+        run(g, 2);
+        check(h.st == Hero.State.GLIDE && h.y > fire[1] + 8, "standing in a campfire's warm air, Space lifts you up on the Windcloak (rose " + (h.y - fire[1]) + " m)");
+
+        Places.Gate fg = pl.gates.get(Places.FROST);
+        h.place(fg.x, fg.y, fg.z - 15);
+        h.yaw = g.camYaw = M.PI;
+        h.stamina = h.maxStamina;
+        in.force(KeyEvent.VK_W, true);
+        for (int k = 0; k < 120 && h.st != Hero.State.AIR; k++) run(g, 1 / 60f);
+        in.force(KeyEvent.VK_W, false);
+        run(g, .15f);
+        tap(g, in, KeyEvent.VK_SPACE);
+        float startZ = h.z, startY = h.y;
+        int hpGlide = h.hp;
+        run(g, 1.5f);
+        check(h.st == Hero.State.GLIDE && startZ - h.z > 9 && startY - h.y < 6 && h.hp == hpGlide,
+                "stepping off Rimeholt's mesa and opening the Windcloak glides you out from the cliff (" + (startZ - h.z) + " m out, " + (startY - h.y) + " m down)");
+        in.force(KeyEvent.VK_W, false);
+
+        g.story.enterDungeon(5);
+        Dungeon sun = g.dungeon;
+        g.foes.clear();
+        h.invuln = 99;
+        boolean dark = !sun.sunlit(0) && !sun.sunlit(1) && !sun.find('S', 0).on && sun.find('C', 0).hidden;
+        Dungeon.Thing entryMirror = null;
+        for (Dungeon.Thing t : sun.things) if (t.kind == 'r' && t.j >= 26) entryMirror = t;
+        h.place(entryMirror.x + 1.4f, sun.floor(entryMirror.x + 1.4f, entryMirror.z), entryMirror.z);
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_E);
+        run(g, .3f);
+        boolean doorOpen = sun.sunlit(1) && sun.find('S', 0).on;
+        for (Dungeon.Thing t : sun.things) if (t.kind == 'r' && t.j < 26) t.on = !t.on;
+        run(g, .2f);
+        check(dark && doorOpen && sun.sunlit(0) && !sun.find('C', 0).hidden,
+                "turning the Sunscour's mirrors bends the sunbeams into its crystals: the door opens and Wren's chest appears");
+
+        g.screen = Game.Screen.PLAY;
+        Dungeon.Thing vent = null;
+        for (Dungeon.Thing t : sun.things) if (t.kind == 'V') vent = t;
+        h.place(vent.x, vent.y, vent.z);
+        h.yaw = g.camYaw = 0;
+        h.stamina = h.maxStamina;
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_SPACE);
+        run(g, 1.2f);
+        in.force(KeyEvent.VK_W, true);
+        run(g, 2.5f);
+        in.force(KeyEvent.VK_W, false);
+        run(g, .5f);
+        check(sun.tj(h.z) <= 14 && h.y > -1, "a vent lifts the Windcloak and you glide clean over the Sunscour's chasm (row " + sun.tj(h.z) + ")");
+
+        Foe stalker = new Foe(Foe.Kind.STALKER, h.x + 6, h.y, h.z);
+        stalker.setState(Foe.HIDE);
+        g.foes.add(stalker);
+        h.invuln = 99;
+        boolean shielded = !stalker.damage(g, Foe.SWORD, 3, stalker.x, stalker.centerY(), stalker.z);
+        boolean surfaced = false;
+        for (int k = 0; k < 300 && !surfaced; k++) {
+            run(g, 1 / 60f);
+            surfaced = stalker.state == Foe.RECOVER;
+        }
+        boolean hurt = surfaced && stalker.damage(g, Foe.SWORD, 1, stalker.x, stalker.centerY(), stalker.z);
+        check(shielded && hurt, "a Dune Stalker can't be hit under the sand, but strikes and is exposed afterwards");
+        g.foes.clear();
+
+        sun.bigKey = true;
+        for (Dungeon.Thing t : sun.things) if (t.kind == 'B') t.on = true;
+        h.place(sun.bossX, sun.bossY, sun.bossZ - 8);
+        run(g, .2f);
+        Foe wyrm = g.boss;
+        boolean woke = wyrm != null && wyrm.kind == Foe.Kind.ASHMAW;
+        if (woke) {
+            wyrm.setState(Foe.RECOVER);
+            run(g, .05f);
+        }
+        float[] maw = new float[3];
+        boolean choked = woke && wyrm.point(0, maw) && wyrm.damage(g, Foe.ARROW, 1, maw[0], maw[1], maw[2]) && wyrm.state == Foe.STUN;
+        float wHp = woke ? wyrm.hp : 0;
+        if (choked) wyrm.damage(g, Foe.SWORD, 2, wyrm.headX, wyrm.headY, wyrm.headZ);
+        check(choked && wyrm.hp < wHp, "an arrow in Ashmaw's open maw brings it down, and then the sword bites");
+        g.boss = null;
+        g.foes.clear();
+        h.invuln = 0;
+        g.story.exitDungeon();
+        g.screen = Game.Screen.PLAY;
+
+        run(g, .1f);
+        Foe drake = g.drake;
+        boolean spawned = drake != null && g.foes.contains(drake);
+        if (spawned) {
+            drake.x = h.x + 20;
+            drake.z = h.z;
+            drake.y = h.y + 12;
+        }
+        h.invuln = 99;
+        run(g, .2f);
+        boolean engaged = spawned && g.boss == drake && drake.state != Foe.IDLE;
+        float[] p = new float[3];
+        if (engaged) for (int i = 0; i < 3; i++) if (drake.point(i, p)) drake.damage(g, Foe.ARROW, 1, p[0], p[1], p[2]);
+        boolean downed = engaged && drake.state == Foe.STUN;
+        float dHp = engaged ? drake.hp : 0;
+        run(g, .5f);
+        if (downed) drake.damage(g, Foe.SWORD, 2, drake.headX, drake.headY, drake.headZ);
+        check(downed && drake.hp < dHp, "the Stormdrake comes down on you; darkening its three storm-scales grounds it for the sword");
+        drake.calm(g);
+        h.invuln = 0;
     }
 
     /** Clicks through any dialog or item screens. */
@@ -755,6 +940,7 @@ final class Dev {
         check(g.gear.gleams == gleamsBefore + 1000, "the dev key ] adds 1000 gleams");
 
         northTests(g, in);
+        skyTests(g, in);
 
         Game fresh = new Game(in, new Audio(false));
         fresh.screen = Game.Screen.PLAY;

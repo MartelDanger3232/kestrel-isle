@@ -42,6 +42,9 @@ final class Scene {
         for (Foe f : g.foes) if (M.dist(f.x, f.z, r.cx, r.cz) < 200 && r.visible(f.x, f.centerY(), f.z, f.radius() * 3)) f.draw(r, xf, g.time);
         if (d == null && g.screen != Game.Screen.TITLE && g.horse.summoned && r.visible(g.horse.x, g.horse.y + 1.2f, g.horse.z, 2.5f)) g.horse.draw(r, xf);
         if (g.screen != Game.Screen.TITLE) hero();
+        Hero gh = g.hero;
+        if (gh.st == Hero.State.GLIDE)
+            r.mesh(g.gear.stormcloak ? Models.STORMCLOAK : Models.WINDCLOAK, xf.identity().translate(gh.x, gh.y, gh.z).rotY(gh.yaw).rotZ(M.sin(g.time * 2.3f) * .05f));
         things();
         if (d == null) {
             view.sky(g.climate, g.time);
@@ -51,6 +54,7 @@ final class Scene {
             for (int i = 0; i < r.px.length; i++) if (r.zb[i] == 0) r.px[i] = c;
         }
         effects();
+        if (d == null && g.drake != null) g.drake.drawStrikes(r, g);
         if (d == null && g.screen != Game.Screen.TITLE) {
             boolean snowy = g.world.biomeAt(g.hero.x, g.hero.z) == World.SNOW;
             view.weather(snowy ? .45f + g.climate.rain * .55f : localRain(), snowy, g.time);
@@ -160,6 +164,7 @@ final class Scene {
                 }
                 case Places.TIDE -> r.mesh(Models.TIDE_GATE, xf);
                 case Places.FROST -> r.mesh(Models.ICE_GATE, xf);
+                case Places.SAND -> r.mesh(Models.SUN_GATE, xf);
                 default -> r.mesh(Models.ALTAR, xf);
             }
         }
@@ -176,6 +181,15 @@ final class Scene {
             if (M.dist(p[0], p[2], r.cx, r.cz) > 220 || !r.visible(p[0], p[1] + 1.2f, p[2], 1.5f)) continue;
             r.mesh(Models.POST, xf.identity().translate(p[0], p[1], p[2]));
             r.point(p[0], p[1] + 2.5f, p[2], .14f + M.sin(t * 5 + p[0]) * .03f, 0xffd870, 220);
+        }
+        for (float[] v : pl.vents) {
+            if (M.dist(v[0], v[2], r.cx, r.cz) > 260 || !r.visible(v[0], v[1] + 6, v[2], 9)) continue;
+            r.mesh(Models.VENT, xf.identity().translate(v[0], v[1], v[2]));
+            // Sand and heat shimmer streaming up the column of rising air.
+            for (int k = 0; k < 14; k++) {
+                float f = (t * (.35f + k % 3 * .07f) + k * .137f) % 1, a = k * 2.4f + t * .8f, rr = .4f + f * 1.6f;
+                r.point(v[0] + M.sin(a) * rr, v[1] + .3f + f * 30, v[2] + M.cos(a) * rr, .07f + f * .12f, 0xe8d2a0, (int) (170 * (1 - f)));
+            }
         }
         for (float[] tn : pl.tents)
             if (M.dist(tn[0], tn[2], r.cx, r.cz) < 250 && r.visible(tn[0], tn[1] + 1.2f, tn[2], 2.5f)) r.mesh(Models.TENT, xf.identity().translate(tn[0], tn[1], tn[2]).rotY(tn[3]));

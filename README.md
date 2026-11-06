@@ -8,7 +8,14 @@ The Hollow has stolen the Wardstones of Kestrel Isle. Starting in the village of
 
 Along the way:
 
-- **Side quests:** Tibb, Ansel, Oskar and Hessa each need a hand. The satchel (Tab) lists them under Requests, and blue diamonds mark where to go.
+- **Side quests:** Tibb, Ansel, Oskar, Hessa and Sela each need a hand. The satchel (Tab) lists them under Requests, and blue diamonds mark where to go.
+- **Sands and skies:** in the eastern desert, Sela's nomads point you to the **Sunscour Temple**:
+  - bend sunbeams with its mirrors to open its doors;
+  - fight burrowing Dune Stalkers and **Ashmaw**, a giant sand wyrm;
+  - claim **Wren's Windcloak**, a glider.
+- **The Windcloak:** press Space in mid-air to glide. Warm air over campfires and desert vents carries you up, and old offerings wait on top of the desert mesas.
+- **The Stormdrake:** once you fly, a colossal drake rides the storms over the mountain. Darken its three glowing storm-scales to bring it down.
+- **Parry:** raise your shield just as a blow lands. The attacker reels, and your next sword strike is a riposte for triple damage.
 - **The grapple claw** works out in the world too:
   - grapple the gold-lit posts on cliffs, spires and sea stacks;
   - lock on and yank enemies to you;
@@ -46,10 +53,10 @@ Progress autosaves to `save.properties` in a `.kestrel-isle` folder in your home
 |---|---|
 | WASD | move |
 | Mouse or arrow keys | camera |
-| Space | roll; while locked on, side-hop (A/D) or back-flip (S) |
+| Space | roll; while locked on, side-hop (A/D) or back-flip (S); in mid-air, open or fold the Windcloak; in rising warm air, take off |
 | Shift (hold) | lock on to the nearest foe |
 | Click / J | sword (3-hit combo; hold, then release for a spin attack) |
-| K / right-click | shield |
+| K / right-click | shield (raise it just as a blow lands to parry) |
 | F | use item (bow and claw: hold to aim, release to fire; bombs: F to light, F to throw) |
 | Q | switch item |
 | C · V | cast spell · switch spell (spells use spirit, the blue bar) |

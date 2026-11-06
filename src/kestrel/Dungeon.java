@@ -16,6 +16,8 @@ final class Dungeon implements Level {
         final int index;
         int i, j;
         float x, y, z, anim;
+        /** Which way a sun source shines, in tiles. */
+        int di, dj;
         boolean on, gone, hidden;
         String content;
         Thing(char kind, int i, int j, int index) { this.kind = kind; this.i = i; this.j = j; this.index = index; }
@@ -55,11 +57,11 @@ final class Dungeon implements Level {
             fh[k] = baseHeight(tile[k]);
             wet[k] = tile[k] == '~';
         }
-        int chest = 0, door = 0, plate = 0, crystal = 0, torch = 0;
+        int chest = 0, door = 0, plate = 0, crystal = 0, torch = 0, sun = 0, sunCrystal = 0, mirror = 0;
         for (int j = 0; j < h; j++)
             for (int i = 0; i < w; i++) {
                 char c = tile[i + j * w];
-                if ("kcCbptToguRP".indexOf(c) >= 0 || "eEfamiWM@w".indexOf(c) >= 0) {
+                if ("kcCbptToguRPYQrqV".indexOf(c) >= 0 || "eEfamiWsM@w".indexOf(c) >= 0) {
                     float nh = neighbourHeight(i, j);
                     // Something standing in open water sits on the pool bed.
                     wet[i + j * w] = Float.isNaN(nh);
@@ -69,7 +71,24 @@ final class Dungeon implements Level {
                 switch (c) {
                     case '@' -> { spawnX = x; spawnY = y; spawnZ = z; }
                     case 'M' -> { bossX = x; bossY = y; bossZ = z; }
-                    case 'e', 'f', 'a', 'm', 'i', 'W' -> spawns.add(at(new Thing(c, i, j, spawns.size()), x, y, z));
+                    case 'e', 'f', 'a', 'm', 'i', 'W', 's' -> spawns.add(at(new Thing(c, i, j, spawns.size()), x, y, z));
+                    case 'Y' -> {
+                        Thing s = add('Y', i, j, sun++, x, y, z);
+                        // A sun source shines away from the wall it stands against.
+                        int[][] dirs = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                        s.di = -1;
+                        for (int[] dd : dirs) {
+                            int a = i + dd[0], b = j + dd[1];
+                            if (a >= 0 && b >= 0 && a < w && b < h && tile[a + b * w] == '#') {
+                                s.di = -dd[0];
+                                s.dj = -dd[1];
+                                break;
+                            }
+                        }
+                    }
+                    case 'Q' -> add('Q', i, j, sunCrystal++, x, y, z);
+                    case 'r', 'q' -> add('r', i, j, mirror++, x, y, z).on = c == 'q';
+                    case 'V' -> add('V', i, j, 0, x, y, z);
                     case 'c', 'C' -> {
                         Thing t = add(c, i, j, chest, x, y, z);
                         t.content = spec.chests()[chest++];
@@ -192,6 +211,15 @@ final class Dungeon implements Level {
     public boolean icy(float x, float z) { return at(ti(x), tj(z)) == '-'; }
 
     /** Fire (Ember Bolts, the Song of Kindling, bombs) melts ice blocks within reach of (x, z). */
+    /** Hot air over vent tiles lifts a gliding hero most of the way up the walls. */
+    float updraft(float x, float y, float z) {
+        int i = ti(x), j = tj(z);
+        if (i < 0 || j < 0 || i >= w || j >= h || tile[i + j * w] != 'V') return 0;
+        float base = fh[i + j * w];
+        // Capped below the wall tops, so nobody glides out over the walls.
+        return y > base - 1 && y < base + WALL - 1.4f ? 1 : 0;
+    }
+
     boolean melt(float x, float z, float reach, Game g) {
         boolean any = false;
         for (Thing t : things)
@@ -213,6 +241,8 @@ final class Dungeon implements Level {
                 case 'u' -> .35f;
                 case 'R' -> .5f;
                 case 'w' -> t.hidden ? 0 : .6f;
+                case 'r', 'Y' -> .55f;
+                case 'Q' -> .45f;
                 default -> 0;
             };
             if (rad == 0 || Math.abs(y - t.y) > 1.5f) continue;
@@ -237,6 +267,46 @@ final class Dungeon implements Level {
     }
 
     boolean plate(int k) { return find('p', k).on; }
+
+    /** Whether sunlight is falling on sun crystal k right now. */
+    boolean sunlit(int k) { return find('Q', k).on; }
+
+    /** The sunbeams as {x0, z0, x1, z1} segments, retraced every frame as mirrors turn. */
+    final List<float[]> beams = new ArrayList<>();
+
+    /** Follows each sunbeam tile by tile: mirrors turn it, crystals drink it, walls and shut doors stop it. */
+    void shine() {
+        beams.clear();
+        for (Thing t : things) if (t.kind == 'Q') t.on = false;
+        for (Thing s : things) {
+            if (s.kind != 'Y') continue;
+            int i = s.i, j = s.j, di = s.di, dj = s.dj;
+            float sx = cx(i), sz = cz(j);
+            for (int n = 0; n < 90; n++) {
+                int ni = i + di, nj = j + dj;
+                if (at(ni, nj) == '#' || floor(cx(ni), cz(nj)) >= WALL) {
+                    beams.add(new float[]{sx, sz, (cx(i) + cx(ni)) / 2, (cz(j) + cz(nj)) / 2});
+                    break;
+                }
+                i = ni;
+                j = nj;
+                Thing hit = null;
+                for (Thing t : things) if ((t.kind == 'r' || t.kind == 'Q') && t.i == i && t.j == j && !t.gone) hit = t;
+                if (hit == null) continue;
+                beams.add(new float[]{sx, sz, cx(i), cz(j)});
+                if (hit.kind == 'Q') {
+                    hit.on = true;
+                    break;
+                }
+                // '/' turns (di, dj) into (-dj, -di); '\' into (dj, di).
+                int k = di;
+                di = hit.on ? dj : -dj;
+                dj = hit.on ? k : -k;
+                sx = cx(i);
+                sz = cz(j);
+            }
+        }
+    }
 
     boolean crystal(int k) { return find('o', k).on; }
 
@@ -276,6 +346,7 @@ final class Dungeon implements Level {
 
     void update(float dt, Game g) {
         Hero p = g.hero;
+        shine();
         for (Thing t : things) {
             switch (t.kind) {
                 case 'S' -> t.anim = M.clamp(t.anim + (t.on ? dt : -dt * 3) * 1.4f, 0, 1);
@@ -468,6 +539,27 @@ final class Dungeon implements Level {
                         r.mesh(Models.FLAME, xf);
                     }
                 }
+                case 'r' -> {
+                    r.mesh(Models.MIRROR_BASE, xf.identity().translate(t.x, t.y, t.z));
+                    r.mesh(Models.MIRROR, xf.identity().translate(t.x, t.y, t.z).rotY(t.on ? M.PI / 4 : -M.PI / 4));
+                }
+                case 'Q' -> {
+                    xf.identity().translate(t.x, t.y, t.z);
+                    r.mesh(Models.SUN_PEDESTAL, xf);
+                    r.mesh(t.on ? Models.SUN_CRYSTAL_ON : Models.SUN_CRYSTAL_OFF, xf.identity().translate(t.x, t.y + 1.3f + M.sin(time * 2 + t.i) * .06f, t.z).rotY(time * .8f));
+                    if (t.on) r.point(t.x, t.y + 1.3f, t.z, .9f + M.sin(time * 9) * .1f, 0xffd870, 70);
+                }
+                case 'Y' -> {
+                    r.mesh(Models.SUN_DISC, xf.identity().translate(t.x, t.y, t.z));
+                    r.mesh(Models.SUN_SHAFT, xf.identity().translate(t.x, t.y, t.z), 70);
+                }
+                case 'V' -> {
+                    r.mesh(Models.VENT, xf.identity().translate(t.x, t.y, t.z).scale(.7f));
+                    for (int k = 0; k < 10; k++) {
+                        float f = (time * (.5f + k % 3 * .08f) + k * .17f) % 1, a = k * 2.4f + time;
+                        r.point(t.x + M.sin(a) * (.3f + f), t.y + .2f + f * 4.2f, t.z + M.cos(a) * (.3f + f), .05f + f * .08f, 0xe8d2a0, (int) (180 * (1 - f)));
+                    }
+                }
                 case 'o' -> {
                     xf.identity().translate(t.x, t.y, t.z);
                     r.mesh(Models.PEDESTAL, xf);
@@ -507,6 +599,15 @@ final class Dungeon implements Level {
                     r.worldTri(x0, y, z0 + T, x0 + T, y, z0 + T, x0, y, z0, col, false, 170);
                     r.worldTri(x0 + T, y, z0 + T, x0 + T, y, z0, x0, y, z0, col, false, 170);
                 }
+        }
+        // Sunbeams: a cross of two glowing ribbons, so they read from any angle.
+        int beam = 0xfff2b0 | Mesh.GLOW;
+        for (float[] b : beams) {
+            float y0 = 1.3f, dx = b[2] - b[0], dz = b[3] - b[1], l = Math.max(.01f, M.hypot(dx, dz)), px = -dz / l * .13f, pz = dx / l * .13f;
+            r.worldTri(b[0], y0 - .13f, b[1], b[2], y0 - .13f, b[3], b[2], y0 + .13f, b[3], beam, true, 170);
+            r.worldTri(b[0], y0 - .13f, b[1], b[2], y0 + .13f, b[3], b[0], y0 + .13f, b[1], beam, true, 170);
+            r.worldTri(b[0] - px, y0, b[1] - pz, b[2] - px, y0, b[3] - pz, b[2] + px, y0, b[3] + pz, beam, true, 170);
+            r.worldTri(b[0] - px, y0, b[1] - pz, b[2] + px, y0, b[3] + pz, b[0] + px, y0, b[1] + pz, beam, true, 170);
         }
     }
 

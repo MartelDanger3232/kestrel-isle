@@ -9,7 +9,7 @@ final class Places {
     static final int TREE = 0, PINE = 1, SNOWPINE = 2, BUSH = 3, ROCK = 4, CACTUS = 5, DEADTREE = 6, REDROCK = 7,
             DARKROCK = 8, FLOWERS = 9, COLLIDER = 10;
     static final int G1 = 0, G5 = 1, G20 = 2, HEART = 3, ARROWS = 4, BOMBS = 5, PIECE = 6, KITE = 7, ROD = 8;
-    static final int ROOT = 0, CINDER = 1, TIDE = 2, CROWN = 3, ALTAR = 4, FROST = 5;
+    static final int ROOT = 0, CINDER = 1, TIDE = 2, CROWN = 3, ALTAR = 4, FROST = 5, SAND = 6;
 
     record Prop(int type, float x, float y, float z, float yaw, float scale, float radius, float top) {}
 
@@ -75,7 +75,7 @@ final class Places {
             this.y = y;
             this.z = z;
             this.yaw = yaw;
-            open = kind == ROOT || kind == FROST;
+            open = kind == ROOT || kind == FROST || kind == SAND;
         }
     }
 
@@ -97,11 +97,13 @@ final class Places {
     final List<float[]> pods = new ArrayList<>();
     /** Grapple posts out on the island, {x, ground y, z}: the claw bites the ring on top. */
     final List<float[]> posts = new ArrayList<>();
+    /** Hot-air vents in the desert, {x, y, z}: the Windcloak rides them high. */
+    final List<float[]> vents = new ArrayList<>();
     /** Tents at the rangers' outpost: {x, y, z, yaw}. */
     final List<float[]> tents = new ArrayList<>();
     /** Sheer rock tables only the claw can climb: {x, z, radius, top}. */
     private final List<float[]> mesas = new ArrayList<>();
-    final float spawnX, spawnZ, villageX, villageZ, outpostX, outpostZ;
+    final float spawnX, spawnZ, villageX, villageZ, outpostX, outpostZ, campX, campZ;
 
     Places(World w, long seed) {
         this.w = w;
@@ -144,6 +146,25 @@ final class Places {
         shrine(villageX - 7, villageZ - 12);
         for (Gate g : gates) shrine(g.x + 7, g.z - 12);
         outpost();
+
+        // The deep desert: Sela's nomad camp, the Sunscour Temple, and hot-air vents beside mesas only a glider can top.
+        float[] nomads = settle(1450, 480, 4, .3f);
+        campX = nomads[0];
+        campZ = nomads[1];
+        float[] sun = gateSpot(1600, 380, SAND);
+        Gate sunGate = gates.get(SAND);
+        flatten(sunGate.x, sunGate.z, 9, sunGate.y);
+        path(campX + 6, campZ - 9, sun[0] - 3, sun[1] - 10);
+        shrine(sunGate.x + 7, sunGate.z - 12);
+        camp();
+        float[][] tops = {{1454, 622}, {1638, 470}, {1342, 310}};
+        for (int k = 0; k < tops.length; k++) {
+            float[] t = tops[k];
+            ventBeside(t[0], t[1]);
+            if (k == 0) addPickup(PIECE, t[0], t[1], "piece-mesa");
+            else for (int i = 0; i < 3; i++) addPickup(G20, t[0] + M.sin(i * 2.1f) * 2.5f, t[1] + M.cos(i * 2.1f) * 2.5f, "mesa" + k + "-" + i);
+        }
+        vents.add(new float[]{sunGate.x - 9, w.height(sunGate.x - 9, sunGate.z - 4), sunGate.z - 4});
         spawnX = villageX;
         spawnZ = villageZ - 14;
 
@@ -216,6 +237,40 @@ final class Places {
         }
         npcs.add(new Npc("ranger", Characters.RANGER, x + 2.5f, y, z - 2.2f, M.PI, 6));
         signs.add(new Sign(x + 4.5f, y, z - 10, 0, "RANGERS' OUTPOST  -  Mind the wolves.  Rimeholt stands north, atop the mesa."));
+    }
+
+    /** Sela's nomads camp among the dunes: tents, a fire, a shrine and a sign pointing the way. */
+    private void camp() {
+        float x = campX, z = campZ, y = Math.max(3, w.height(x, z));
+        flatten(x, z, 11, y);
+        shrine(x - 7, z + 6);
+        fires.add(new float[]{x, y, z});
+        for (int i = 0; i < 3; i++) {
+            float a = i * 2.1f + 1.2f, tx = x + M.sin(a) * 7, tz = z + M.cos(a) * 7;
+            tents.add(new float[]{tx, y, tz, a + M.PI});
+            collider(tx, tz, 2, 2.6f);
+        }
+        npcs.add(new Npc("nomad", Characters.NOMAD, x + 2.4f, y, z - 2.4f, M.PI, 4));
+        signs.add(new Sign(x + 4.5f, y, z - 9, 0, "SUNSCOUR NOMADS  -  Water, shade and stories.  The Sunscour Temple lies south-east."));
+    }
+
+    /** A hot-air vent at the foot of the mesa whose flat top is at (x, z), on whichever side drops away soonest. */
+    private void ventBeside(float x, float z) {
+        float top = w.height(x, z), best = 1e9f, bx = x, bz = z;
+        for (int a = 0; a < 16; a++) {
+            float dx = M.sin(a * M.TAU / 16), dz = M.cos(a * M.TAU / 16);
+            for (float r = 4; r < 60; r += 1) {
+                if (w.height(x + dx * r, z + dz * r) > top - 22) continue;
+                if (r < best) {
+                    best = r;
+                    bx = x + dx * (r + 2.5f);
+                    bz = z + dz * (r + 2.5f);
+                }
+                break;
+            }
+        }
+        vents.add(new float[]{bx, w.height(bx, bz), bz});
+        reserved.add(new float[]{bx, bz, 4});
     }
 
     /** Raises a sheer-sided rock table that nothing can walk up; returns the height of its top. */

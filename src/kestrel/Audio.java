@@ -15,7 +15,7 @@ final class Audio {
     static final int SWING = 0, HIT = 1, CLANG = 2, ROLL = 3, JUMP = 4, SPIN = 5, HURT = 6, PICKUP = 7, GLEAM = 8, SECRET = 9,
             CLICK = 10, PUSH = 11, DOOR = 12, BOW = 13, BOOM = 14, SLAM = 15, STUN = 16, SPLASH = 17, ITEM = 18, TALK = 19,
             CHEST = 20, DIE = 21, HEART = 22, CLAW = 23, FUSE = 24, CAST = 25, THUNDER = 26, STARFALL = 27, HOOF = 28, NEIGH = 29,
-            REST = 30, LEVEL = 31, CHIRP = 32, CRICKET = 33, WIND = 34, HOOT = 35, FLAP = 36;
+            REST = 30, LEVEL = 31, CHIRP = 32, CRICKET = 33, WIND = 34, HOOT = 35, FLAP = 36, PARRY = 37, GUST = 38;
     static final int TITLE = 0, VILLAGE = 1, FIELD = 2, NIGHT = 3, DUNGEON = 4, BOSS = 5, SILENT = 6;
     /** The flute plays a C major pentatonic: C D E G A. */
     static final double[] FLUTE = {523.25, 587.33, 659.25, 783.99, 880.0};
@@ -92,6 +92,8 @@ final class Audio {
             case CRICKET -> { for (int i = 0; i < 4; i++) add(1, 4700, 4700, .018, .012, i * .05); }
             case WIND -> { add(2, 500, 250, 1.8, .022, 0); add(2, 300, 420, 1.4, .018, .5); }
             case HOOT -> { add(3, 390, 370, .25, .05, 0); add(3, 370, 330, .4, .05, .32); }
+            case PARRY -> { add(1, 1800, 1700, .12, .1, 0); add(0, 900, 1500, .1, .07, 0); add(1, 2700, 2700, .3, .05, .04); }
+            case GUST -> { add(2, 260, 600, .7, .05, 0); add(2, 500, 300, .5, .03, .3); }
             case FLAP -> { for (int i = 0; i < 5; i++) add(2, 700, 400, .06, .03, i * .07); }
             default -> {}
         }
