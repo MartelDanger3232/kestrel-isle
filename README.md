@@ -40,9 +40,9 @@ Get the latest build from the [Releases page](https://github.com/MartelDanger323
 - **Mac (Apple Silicon: Apple menu → About This Mac says "Chip: Apple M…"):**
   - **Easiest:** macOS blocks games that Apple hasn't notarized, so install it with one line in Terminal (open Terminal from Spotlight, paste the line, press Return). It downloads the game into your Applications folder and opens it:
 
-        curl -L https://github.com/MartelDanger3232/kestrel-isle/releases/latest/download/KestrelIsle-Mac-AppleSilicon.zip -o /tmp/KestrelIsle.zip && ditto -x -k /tmp/KestrelIsle.zip ~/Applications && open ~/Applications/"Kestrel Isle.app"
+        curl -fsSL https://raw.githubusercontent.com/MartelDanger3232/kestrel-isle/main/install-mac.sh | bash
 
-    After that it opens from Launchpad like any other app. Run the same line again to update.
+    After that it opens from Launchpad like any other app. Run the same line again to update. (It runs [install-mac.sh](install-mac.sh).)
   - **Already downloaded it in your browser?** Drag **Kestrel Isle** into Applications, then run `xattr -cr "/Applications/Kestrel Isle.app"` in Terminal and open it again.
 - **Windows:** download `KestrelIsle-Windows.zip`, unzip it, and run `KestrelIsle.exe` inside the `KestrelIsle` folder. If SmartScreen warns you, click **More info**, then **Run anyway**.
 - **Linux:** download `KestrelIsle-Linux.tar.gz`, extract it, and run `KestrelIsle/bin/KestrelIsle`.
