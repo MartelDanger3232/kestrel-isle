@@ -8,7 +8,7 @@ import java.util.function.IntConsumer;
 
 /** The running game: levels, combat, projectiles, pickups and screen flow. Story content lives in Story. */
 final class Game {
-    enum Screen { TITLE, PLAY, DIALOG, FLUTE, MENU, MAP, PAUSE, OVER, END, REST, LEVEL, TRAVEL, GEAR }
+    enum Screen { TITLE, PLAY, DIALOG, FLUTE, MENU, MAP, PAUSE, OVER, END, REST, LEVEL, TRAVEL, GEAR, DEV, JOIN }
 
     static final int ARROW = 0, FIREBALL = 1, SEED = 2, WATERBALL = 3, LANTERN = 4, ROCK = 5, P_EMBER = 6, P_FROST = 7, P_RADIANT = 8;
     static final int CONTAINER = 7;
@@ -30,6 +30,8 @@ final class Game {
         final List<Foe> hit = new ArrayList<>(2);
         /** Shots loosed while locked on home in on that weak point and pass by the rest of the foe. */
         Foe homing;
+        /** The hero who loosed it (so it can strike a duelling friend, never its owner). */
+        Hero owner;
         int homePoint;
 
         boolean friendly() { return kind == ARROW || kind >= P_EMBER; }
@@ -49,13 +51,46 @@ final class Game {
         float x, y, z, vy, life = 14;
     }
 
-    final Input in;
+    /**
+     * Someone playing: this computer's own hero first, then friends who joined over the network (see Coop). Each has
+     * their own hero, gear, keys and camera.
+     */
+    static final class Player {
+        final Hero hero;
+        final Gear gear;
+        Input in;
+        String name;
+        /** Which player this is in co-op (0 is the host). */
+        int id;
+        float camYaw, camPitch = -.3f, downT;
+        /** The recent sword trail, hilt and tip positions. */
+        final float[] hilt = new float[30], tip = new float[30];
+        int trailN;
+
+        Player(Hero hero, Gear gear, Input in, String name) {
+            this.hero = hero;
+            this.gear = gear;
+            this.in = in;
+            this.name = name;
+        }
+    }
+
+    /**
+     * The hero, gear, keys and camera every rule works on. Normally this computer's own player; for a moment at a
+     * time a friend's (see as()), so everything in the game works the same for every hero.
+     */
+    Input in;
+    Gear gear = new Gear();
+    Hero hero;
+    final Player me;
+    final List<Player> players = new ArrayList<>();
+    private Player current;
+    /** Co-op, when hosting or joined; null alone. */
+    Coop coop;
     final Audio audio;
     final World world;
     final Field field;
     final Climate climate = new Climate();
-    final Gear gear = new Gear();
-    final Hero hero;
     final Story story;
     final Magic magic;
     final Horse horse = new Horse();
@@ -98,6 +133,8 @@ final class Game {
     int gain, lostLevel = -9, lostGleams;
     float lostX, lostY, lostZ;
     String tip;
+    /** The host's address being typed on the join screen. */
+    final StringBuilder joinAddress = new StringBuilder();
     private Runnable action;
     private float bestD;
 
@@ -110,11 +147,97 @@ final class Game {
         level = field;
         Places pl = world.places;
         hero = new Hero(pl.spawnX, world.height(pl.spawnX, pl.spawnZ), pl.spawnZ);
+        me = current = new Player(hero, gear, in, System.getProperty("kestrel.name", System.getProperty("user.name", "Keeper")));
+        players.add(me);
         story = new Story(this);
         magic = new Magic(this);
         refreshStats();
         spawnFieldFoes();
         audio.music(Audio.TITLE);
+    }
+
+    /** Points every rule (hero, gear, keys, camera) at p; returns who it was before, to switch back with. */
+    Player as(Player p) {
+        Player was = current;
+        was.camYaw = camYaw;
+        was.camPitch = camPitch;
+        current = p;
+        hero = p.hero;
+        gear = p.gear;
+        in = p.in;
+        camYaw = p.camYaw;
+        camPitch = p.camPitch;
+        return was;
+    }
+
+    Player current() { return current; }
+
+    /** The nearest player still on their feet (this computer's own if everyone is down). */
+    Player nearest(float x, float z) {
+        Player best = me;
+        float bd = Float.MAX_VALUE;
+        for (Player p : players) {
+            float d = M.dist(x, z, p.hero.x, p.hero.z);
+            if (p.hero.st != Hero.State.DEAD && d < bd) {
+                bd = d;
+                best = p;
+            }
+        }
+        return best;
+    }
+
+    /** A friend's hero for one frame: their keys for tools and spells, their moves, and what they pick up. */
+    private void guest(float dt, Player p) {
+        Player was = as(p);
+        in.poll();
+        Hero host = me.hero;
+        // Left behind by a dungeon door or fast travel: catch up with the host.
+        if (M.dist(hero.x, hero.z, host.x, host.z) > 200) hero.place(host.x + 1.5f, host.y, host.z + 1.5f);
+        if (hero.st == Hero.State.DEAD) {
+            hero.update(dt, this);
+            if ((p.downT += dt) > 3) {
+                hero.place(host.x + 1.5f, host.y, host.z + 1.5f);
+                hero.hp = hero.maxHp;
+                hero.setState(Hero.State.MOVE);
+                hero.invuln = 2;
+                p.downT = 0;
+            }
+        } else {
+            if (in.pressed(KeyEvent.VK_Q) && gear.bow) gear.bowOut = !gear.bowOut;
+            if (in.pressed(KeyEvent.VK_X)) cycleItem(1);
+            if (in.pressed(KeyEvent.VK_V)) cycleSpell();
+            if (in.pressed(KeyEvent.VK_P)) toggleDuel();
+            if (!hero.busy()) hero.update(dt, this);
+            else hero.anim.update(dt);
+            collect();
+        }
+        as(was);
+    }
+
+    /** A friend's own screen while joined: their menus and camera; the world itself comes from the host. */
+    private void guestPlay(float dt) {
+        if (in.pressed(KeyEvent.VK_ESCAPE)) screen = Screen.PAUSE;
+        else if (in.any(KeyEvent.VK_I)) {
+            screen = Screen.GEAR;
+            gearCol = 0;
+            gearRow = gear.weapon;
+        } else if (in.any(KeyEvent.VK_TAB)) screen = Screen.MENU;
+        else if (in.pressed(KeyEvent.VK_M) && dungeon == null) screen = Screen.MAP;
+        else if (in.pressed(KeyEvent.VK_OPEN_BRACKET)) screen = Screen.DEV;
+        look(dt);
+        if (dungeon == null) life.update(dt);
+    }
+
+    /** Mouse and arrow keys turn the camera. */
+    private void look(float dt) {
+        float turn = 2.2f * dt;
+        camYaw += in.dx * .0036f;
+        camPitch -= in.dy * .0031f;
+        if (in.down(KeyEvent.VK_LEFT)) camYaw -= turn;
+        if (in.down(KeyEvent.VK_RIGHT)) camYaw += turn;
+        if (in.down(KeyEvent.VK_UP)) camPitch += turn * .7f;
+        if (in.down(KeyEvent.VK_DOWN)) camPitch -= turn * .7f;
+        camPitch = M.clamp(camPitch, -1.2f, .6f);
     }
 
     void spawnFieldFoes() {
@@ -125,8 +248,15 @@ final class Game {
 
     // ---- frame update -------------------------------------------------------------------------
 
+    /** Menus a co-op host can sit in while friends play on (a conversation still pauses the island). */
+    static final java.util.Set<Screen> MENUS = java.util.EnumSet.of(Screen.PAUSE, Screen.MENU, Screen.MAP, Screen.GEAR, Screen.DEV);
+    /** Keys nobody presses, for the host's hero while they're in a menu. */
+    private final Input calm = new Input();
+
     void update(float dt) {
         in.poll();
+        if (coop != null) coop.before();
+        Screen shown = screen;
         time += dt;
         messageT -= dt;
         shake = Math.max(0, shake - dt * 2);
@@ -143,6 +273,7 @@ final class Game {
             }
             case MAP -> { if (in.any(KeyEvent.VK_M, KeyEvent.VK_ESCAPE)) screen = Screen.PLAY; }
             case GEAR -> gearMenu();
+            case DEV -> devPack();
             case PAUSE -> { if (in.any(KeyEvent.VK_ESCAPE, KeyEvent.VK_ENTER)) screen = Screen.PLAY; }
             case OVER -> {
                 overT += dt;
@@ -158,8 +289,40 @@ final class Game {
                     story.exitDungeon();
                 }
             }
-            case PLAY -> play(dt);
+            case PLAY -> {
+                if (coop != null && coop.joined()) guestPlay(dt);
+                else play(dt);
+            }
+            case JOIN -> joinScreen();
         }
+        if (coop != null && coop.hosting() && players.size() > 1 && MENUS.contains(shown) && MENUS.contains(screen)) idle(dt);
+        if (coop != null) coop.after(dt);
+    }
+
+    /** The world carries on with this computer's own hero standing still, so friends keep playing while the host is in a menu. */
+    private void idle(float dt) {
+        Screen menu = screen;
+        Input keys = me.in;
+        me.in = in = calm;
+        screen = Screen.PLAY;
+        play(dt);
+        if (screen == Screen.PLAY) screen = menu;
+        me.in = in = keys;
+    }
+
+    /** Typing the host's address to join their island: letters, digits, dots and dashes; Enter joins, Esc goes back. */
+    private void joinScreen() {
+        if (in.pressed(KeyEvent.VK_ESCAPE)) {
+            screen = Screen.TITLE;
+            return;
+        }
+        for (int k = KeyEvent.VK_0; k <= KeyEvent.VK_Z; k++)
+            if (in.pressed(k) && Character.isLetterOrDigit(k) && joinAddress.length() < 60) joinAddress.append(Character.toLowerCase((char) k));
+        if (in.pressed(KeyEvent.VK_PERIOD)) joinAddress.append('.');
+        if (in.pressed(KeyEvent.VK_SEMICOLON) && in.down(KeyEvent.VK_SHIFT)) joinAddress.append(':');
+        if (in.pressed(KeyEvent.VK_MINUS)) joinAddress.append('-');
+        if (in.pressed(KeyEvent.VK_BACK_SPACE) && !joinAddress.isEmpty()) joinAddress.setLength(joinAddress.length() - 1);
+        if (in.pressed(KeyEvent.VK_ENTER) && !joinAddress.isEmpty()) Coop.join(this, joinAddress.toString());
     }
 
     private void play(float dt) {
@@ -187,11 +350,16 @@ final class Game {
         }
         if (in.pressed(KeyEvent.VK_X)) cycleItem(1);
         if (in.pressed(KeyEvent.VK_V)) cycleSpell();
+        if (in.pressed(KeyEvent.VK_P)) toggleDuel();
         if (in.pressed(KeyEvent.VK_BACK_QUOTE)) {
             story.devSkip();
             return;
         }
         if (in.pressed(KeyEvent.VK_EQUALS)) story.devJump();
+        if (in.pressed(KeyEvent.VK_OPEN_BRACKET)) {
+            screen = Screen.DEV;
+            return;
+        }
         if (in.pressed(KeyEvent.VK_CLOSE_BRACKET)) {
             gear.gleams += 1000;
             sfx(Audio.GLEAM);
@@ -209,14 +377,7 @@ final class Game {
             hero.pose(Hero.State.FLUTE, Characters.H_FLUTE);
             return;
         }
-        float turn = 2.2f * dt;
-        camYaw += in.dx * .0036f;
-        camPitch -= in.dy * .0031f;
-        if (in.down(KeyEvent.VK_LEFT)) camYaw -= turn;
-        if (in.down(KeyEvent.VK_RIGHT)) camYaw += turn;
-        if (in.down(KeyEvent.VK_UP)) camPitch += turn * .7f;
-        if (in.down(KeyEvent.VK_DOWN)) camPitch -= turn * .7f;
-        camPitch = M.clamp(camPitch, -1.2f, .6f);
+        look(dt);
         if (freeze > 0) {
             freeze -= dt;
             return;
@@ -233,6 +394,7 @@ final class Game {
             horse.update(dt, this);
         }
         magic.update(dt);
+        for (int i = 1; i < players.size(); i++) guest(dt, players.get(i));
         if (lostGleams > 0 && lostLevel == dungeonIndex && M.dist(hero.x, hero.z, lostX, lostZ) < 1.6f && Math.abs(hero.y - lostY) < 2.5f) {
             gear.gleams += lostGleams;
             say("You recover " + lostGleams + " gleams.");
@@ -254,9 +416,15 @@ final class Game {
             story.dungeonEvents();
             if (hero.y < -6 && dungeon.at(dungeon.ti(hero.x), dungeon.tj(hero.z)) != '~') fellInPit();
         }
+        // Each foe goes after whoever is nearest, so every rule it uses about "the hero" means that player.
         for (int i = 0; i < foes.size(); i++) {
             Foe f = foes.get(i);
-            if (f.boss || M.dist(f.x, f.z, hero.x, hero.z) < 90) f.update(dt, this);
+            Player prey = nearest(f.x, f.z);
+            if (f.boss || M.dist(f.x, f.z, prey.hero.x, prey.hero.z) < 90) {
+                Player was = as(prey);
+                f.update(dt, this);
+                as(was);
+            }
         }
         foes.removeIf(f -> !f.alive() && f.deadT > 1.5f);
         updateProjectiles(dt);
@@ -350,6 +518,135 @@ final class Game {
     /** Whether the hero owns weapon (kind 0), outfit (1) or dye (2) number i. */
     boolean owns(int kind, int i) { return ((kind == 0 ? gear.weapons : kind == 1 ? gear.outfits : gear.dyes) & 1 << i) != 0; }
 
+    // ---- the dev pack ------------------------------------------------------------------------------
+
+    /** One thing the dev pack can hand over: its name, whether the hero has it, and how to give it. */
+    record DevItem(String name, java.util.function.BooleanSupplier has, Runnable give) {}
+
+    static final String[] DEV_TABS = {"Weapons", "Outfits", "Dyes", "Tools", "Songs", "Spells", "Stones", "Supplies"};
+    int devTab, devRow;
+    private List<List<DevItem>> devPack;
+
+    /** The dev pack ([): A/D pick a tab, W/S an item, E or Enter takes it, F takes the whole tab, [ (or Esc) closes. */
+    private void devPack() {
+        if (in.any(KeyEvent.VK_OPEN_BRACKET, KeyEvent.VK_ESCAPE, KeyEvent.VK_TAB)) {
+            screen = Screen.PLAY;
+            return;
+        }
+        List<List<DevItem>> tabs = devItems();
+        int turn = in.any(KeyEvent.VK_A, KeyEvent.VK_LEFT) ? tabs.size() - 1 : in.any(KeyEvent.VK_D, KeyEvent.VK_RIGHT) ? 1 : 0;
+        if (turn > 0) {
+            devTab = (devTab + turn) % tabs.size();
+            devRow = 0;
+        }
+        List<DevItem> tab = tabs.get(devTab);
+        if (in.any(KeyEvent.VK_W, KeyEvent.VK_UP)) devRow = (devRow + tab.size() - 1) % tab.size();
+        if (in.any(KeyEvent.VK_S, KeyEvent.VK_DOWN)) devRow = (devRow + 1) % tab.size();
+        boolean all = in.pressed(KeyEvent.VK_F);
+        if (!all && !in.any(KeyEvent.VK_E, KeyEvent.VK_ENTER, KeyEvent.VK_SPACE)) return;
+        audio.sfx(Audio.PICKUP);
+        say("DEV " + (all ? "took every one of the " + DEV_TABS[devTab].toLowerCase() : tab.get(devRow).name()));
+        // A co-op friend's gear lives on the host's island, so the host hands it over.
+        if (coop != null && coop.joined()) {
+            coop.dev(devTab, devRow, all);
+            return;
+        }
+        devGive(devTab, devRow, all);
+        story.save();
+    }
+
+    /** Hands the current player item row of dev pack tab t (or the whole tab). */
+    void devGive(int t, int row, boolean all) {
+        List<DevItem> tab = devItems().get(t);
+        for (DevItem it : all ? tab : List.of(tab.get(row))) it.give().run();
+    }
+
+    /** Every item in the game, by dev pack tab. */
+    List<List<DevItem>> devItems() {
+        if (devPack != null) return devPack;
+        devPack = new ArrayList<>();
+        for (int k = 0; k < 3; k++) {
+            List<DevItem> tab = new ArrayList<>();
+            int kind = k;
+            for (int i = 0; i < (k == 0 ? Arms.WEAPON : k == 1 ? Arms.OUTFIT : Arms.DYE).length; i++) {
+                int n = i;
+                tab.add(new DevItem(Story.itemName(kind, n), () -> owns(kind, n), () -> {
+                    if (kind == 0) {
+                        gear.sword = true;
+                        gear.weapons |= 1 << n;
+                    } else if (kind == 1) gear.outfits |= 1 << n;
+                    else gear.dyes |= 1 << n;
+                }));
+            }
+            devPack.add(tab);
+        }
+        devPack.add(List.of(
+                new DevItem("Keeper's Sword", () -> gear.sword, () -> gear.sword = true),
+                new DevItem("Driftwood Shield", () -> gear.shield, () -> gear.shield = true),
+                new DevItem("Windflute", () -> gear.flute, () -> gear.flute = true),
+                new DevItem("Hunter's Bow", () -> gear.bow, () -> {
+                    gear.bow = true;
+                    gear.arrows = Math.max(gear.arrows, 30);
+                }),
+                new DevItem("Bomb Bag", () -> gear.bombBag, () -> {
+                    gear.bombBag = true;
+                    gear.bombs = Math.max(gear.bombs, 15);
+                }),
+                new DevItem("Grapple Claw", () -> gear.claw, () -> gear.claw = true),
+                new DevItem("Longclaw", () -> gear.longclaw, () -> gear.claw = gear.longclaw = true),
+                new DevItem("Rime-Tempered Blade", () -> gear.frostbrand, () -> gear.frostbrand = true),
+                new DevItem("Windcloak", () -> gear.windcloak, () -> {
+                    gear.windcloak = true;
+                    gear.spells |= 1 << Magic.GUST;
+                }),
+                new DevItem("Stormcloak", () -> gear.stormcloak, () -> {
+                    gear.windcloak = gear.stormcloak = true;
+                    gear.spells |= 1 << Magic.GUST;
+                }),
+                new DevItem("Sun Relic", () -> gear.sunRelic, () -> gear.sunRelic = true)));
+        devPack.add(bits(Story.SONG_NAMES, "", () -> gear.songs, b -> {
+            gear.songs |= b;
+            gear.flute = true;
+        }));
+        devPack.add(bits(Magic.NAME, "", () -> gear.spells, b -> gear.spells |= b));
+        devPack.add(bits(Story.STONES, " Stone", () -> gear.stones, b -> {
+            gear.stones |= b;
+            if (Integer.bitCount(gear.stones) == Story.STONES.length) {
+                gear.ascended = true;
+                gear.spells |= 1 << Magic.STARFALL;
+            }
+        }));
+        devPack.add(List.of(
+                new DevItem("Full quiver (50 arrows)", () -> gear.arrows >= 50, () -> {
+                    gear.bow = true;
+                    gear.arrows = 50;
+                }),
+                new DevItem("Full bomb bag (30 bombs)", () -> gear.bombs >= 30, () -> {
+                    gear.bombBag = true;
+                    gear.bombs = 30;
+                }),
+                new DevItem("1000 gleams", () -> false, () -> gear.gleams += 1000),
+                new DevItem("Heart container", () -> gear.hearts >= 20, () -> gear.hearts = Math.min(20, gear.hearts + 1)),
+                new DevItem("Draught flask (refills them all)", () -> gear.maxFlasks >= 7, () -> gear.flasks = gear.maxFlasks = Math.min(7, gear.maxFlasks + 1)),
+                new DevItem("Everything at once", () -> false, () -> {
+                    for (int t = 0; t < DEV_TABS.length - 1; t++) for (DevItem it : devPack.get(t)) it.give().run();
+                    gear.bow = gear.bombBag = true;
+                    gear.arrows = 50;
+                    gear.bombs = 30;
+                })));
+        return devPack;
+    }
+
+    /** A tab of numbered things kept as bits (songs, spells, stones). */
+    private static List<DevItem> bits(String[] names, String suffix, java.util.function.IntSupplier mask, java.util.function.IntConsumer give) {
+        List<DevItem> tab = new ArrayList<>();
+        for (int i = 0; i < names.length; i++) {
+            int bit = 1 << i;
+            tab.add(new DevItem(names[i] + suffix, () -> (mask.getAsInt() & bit) != 0, () -> give.accept(bit)));
+        }
+        return tab;
+    }
+
     /** A charged blow's burst: every foe within r of (x, z) is hit, and lesser ones reel if stagger is set. */
     void blast(float x, float z, float r, float dmg, boolean stagger) {
         for (Foe f : new ArrayList<>(foes)) {
@@ -398,8 +695,8 @@ final class Game {
     }
 
     void cycleSpell() {
-        for (int k = 1; k <= 5; k++) {
-            int i = (gear.spell + k) % 5;
+        for (int k = 1; k <= Magic.NAME.length; k++) {
+            int i = (gear.spell + k) % Magic.NAME.length;
             if ((gear.spells & 1 << i) != 0) {
                 gear.spell = i;
                 return;
@@ -432,6 +729,7 @@ final class Game {
         }
         Shot s = new Shot();
         s.kind = kind;
+        s.owner = h;
         s.x = sx;
         s.y = sy;
         s.z = sz;
@@ -519,7 +817,99 @@ final class Game {
                 }
             }
         }
+        // Duelling friends' blades find each other too.
+        Player by = current;
+        for (Player p : players) {
+            Hero o = p.hero;
+            if (!rivals(h, o) || o.invuln > 0) continue;
+            float dx = o.x - h.x, dz = o.z - h.z, d = M.hypot(dx, dz);
+            if (d > range + .5f || Math.abs(o.y - h.y) > 1.8f || !spin && Math.abs(M.angleDiff(h.yaw, M.atan2(dx, dz))) > M.PI * arc / 360 + .35f) continue;
+            duelHit(p, by, Math.max(1, Math.round(dmg * 1.5f)), h.x, h.z, true);
+            hit = true;
+        }
         if (hit) shake(.12f);
+    }
+
+    // ---- duels --------------------------------------------------------------------------------
+
+    /** Two players who have both opted in to duels (P) can fight each other. */
+    boolean rivals(Hero a, Hero b) { return a != b && a.dueling && b.dueling; }
+
+    /** P: opt in to (or out of) duels; two duellists can lock on to each other and fight. */
+    private void toggleDuel() {
+        hero.dueling = !hero.dueling;
+        audio.sfx(Audio.CLICK);
+        say(hero.dueling ? current.name + " is ready to duel: anyone else who presses P can fight them." : current.name + " put away their duel.");
+    }
+
+    Player player(int id) {
+        for (Player p : players) if (p.id == id) return p;
+        return null;
+    }
+
+    private Player of(Hero h) {
+        for (Player p : players) if (p.hero == h) return p;
+        return me;
+    }
+
+    /** The nearest duelling friend within range: in front, or anywhere when anyDirection. */
+    Hero nearestRival(Hero h, float range, boolean anyDirection) {
+        Hero best = null;
+        float bd = range;
+        for (Player p : players) {
+            Hero o = p.hero;
+            if (!rivals(h, o) || o.st == Hero.State.DEAD) continue;
+            float d = M.dist(h.x, h.z, o.x, o.z);
+            if (d < bd && (anyDirection || Math.abs(M.angleDiff(h.yaw, M.atan2(o.x - h.x, o.z - h.z))) < 1.4f)) {
+                bd = d;
+                best = o;
+            }
+        }
+        return best;
+    }
+
+    /** A duelling friend's blow lands on player p (who may block or parry it). At their last heart the duel is over: friends never kill. */
+    private void duelHit(Player p, Player by, int dmg, float fromX, float fromZ, boolean blockable) {
+        Player was = as(p);
+        if (hero.hit(this, dmg, fromX, fromZ, blockable)) {
+            audio.sfx(Audio.HURT);
+            if (p == me) {
+                hurtFlash = 1;
+                shake(.3f);
+            }
+            if (hero.hp <= 1) {
+                hero.hp = 1;
+                if (hero.st == Hero.State.DEAD) {
+                    hero.setState(Hero.State.HURT);
+                    hero.anim.restart(Characters.H_HURT, .04f);
+                }
+                hero.dueling = by.hero.dueling = false;
+                hero.invuln = 2;
+                say(by.name + " wins the duel against " + p.name + "!");
+            }
+        }
+        as(was);
+    }
+
+    /** A duellist's blast (Thunder Ring, a falling star) catches duelling friends within r of (x, z). */
+    void duelArea(Hero by, float x, float z, float r, int dmg) {
+        Player from = of(by);
+        for (Player p : new ArrayList<>(players))
+            if (rivals(by, p.hero) && p.hero.invuln <= 0 && M.dist(p.hero.x, p.hero.z, x, z) < r) duelHit(p, from, dmg, x, z, false);
+    }
+
+    /** A duellist's arrow or spell striking a duelling friend; true if it hit. */
+    private boolean duelShot(Shot s) {
+        if (s.owner == null || !s.owner.dueling) return false;
+        for (Player p : players) {
+            Hero o = p.hero;
+            float dx = s.x - o.x, dy = s.y - o.y - 1, dz = s.z - o.z;
+            if (!rivals(s.owner, o) || o.invuln > 0 || dx * dx + dy * dy + dz * dz > 1) continue;
+            duelHit(p, of(s.owner), s.kind == ARROW ? 2 : 3, s.x - s.vx, s.z - s.vz, true);
+            sparks(s.x, s.y, s.z, 0xfff0c0, 6);
+            return true;
+        }
+        return false;
     }
 
     void breakPot(Dungeon.Thing t) {
@@ -647,6 +1037,8 @@ final class Game {
     }
 
     void fireClaw(Hero h) {
+        // There's one claw chain in the world; in co-op it's the host's.
+        if (current != me || coop != null && coop.joined()) return;
         float[] d = aimDir(h), at = clawTarget(h);
         if (at != null) {
             float dx = at[0] - h.x, dy = at[1] - (h.y + 1.4f), dz = at[2] - h.z, l = M.sqrt(dx * dx + dy * dy + dz * dz);
@@ -711,10 +1103,14 @@ final class Game {
 
     void hurtHero(int dmg, float fromX, float fromZ, boolean blockable) {
         if (screen != Screen.PLAY && screen != Screen.FLUTE) return;
-        if (horse.ridden && hero.invuln <= 0) horse.dismount(this);
+        // Only this computer's own player rides Juniper and feels the screen flash when hit.
+        boolean mine = current == me;
+        if (mine && horse.ridden && hero.invuln <= 0) horse.dismount(this);
         if (hero.hit(this, dmg, fromX, fromZ, blockable)) {
-            hurtFlash = 1;
-            shake(.35f);
+            if (mine) {
+                hurtFlash = 1;
+                shake(.35f);
+            }
             audio.sfx(Audio.HURT);
             if (screen == Screen.FLUTE) screen = Screen.PLAY;
             overT = 0;
@@ -751,6 +1147,9 @@ final class Game {
             }
         }
         if (best != null) best.stagger();
+        // A duelling friend's swing turned aside leaves them reeling too.
+        for (Player p : players)
+            if (rivals(hero, p.hero) && M.dist(p.hero.x, p.hero.z, fromX, fromZ) < 2.5f) p.hero.reel(hero.x, hero.z);
         audio.sfx(Audio.PARRY);
         sparks(hero.x + M.sin(hero.yaw) * .6f, hero.y + 1.1f, hero.z + M.cos(hero.yaw) * .6f, 0xffe9a0, 24);
         shake(.25f);
@@ -802,7 +1201,7 @@ final class Game {
             Shot s = shots.get(i);
             if (s.kind == ARROW || s.kind == SEED) s.vy -= 9 * dt;
             if (s.kind >= P_EMBER) {
-                if (stepSpell(s, dt)) shots.remove(i);
+                if (duelShot(s) || stepSpell(s, dt)) shots.remove(i);
                 continue;
             }
             if (s.kind == ARROW && s.homing != null) {
@@ -817,6 +1216,7 @@ final class Game {
             s.y += s.vy * dt;
             s.z += s.vz * dt;
             boolean dead = (s.life -= dt) <= 0 || s.y < level.floor(s.x, s.z) || !Float.isNaN(level.water(s.x, s.z)) && s.y < 0;
+            if (s.kind == ARROW && duelShot(s)) dead = true;
             if (s.kind == ARROW) {
                 for (Foe f : foes)
                     if (f != s.homing && f.hitTest(s.x, s.y, s.z) > 0) {
@@ -839,9 +1239,13 @@ final class Game {
                 else if (story.arrowAt(s.x, s.y, s.z)) dead = true;
                 if (dead) sparks(s.x, s.y, s.z, 0xf0e0c0, 4);
             } else {
-                float dx = s.x - hero.x, dy = s.y - hero.y - 1, dz = s.z - hero.z, r = s.kind == ROCK ? 1.6f : 1;
-                if (dx * dx + dy * dy + dz * dz < r * r) {
+                float r = s.kind == ROCK ? 1.6f : 1;
+                for (Player p : players) {
+                    float dx = s.x - p.hero.x, dy = s.y - p.hero.y - 1, dz = s.z - p.hero.z;
+                    if (dead || dx * dx + dy * dy + dz * dz >= r * r) continue;
+                    Player was = as(p);
                     hurtHero(s.kind == ROCK ? 4 : 2, s.x - s.vx, s.z - s.vz, s.kind != ROCK);
+                    as(was);
                     dead = true;
                 }
                 if (dead) {
@@ -886,10 +1290,14 @@ final class Game {
         for (int i = waves.size() - 1; i >= 0; i--) {
             float[] w = waves.get(i);
             w[2] += 13 * dt;
-            float d = M.dist(w[0], w[1], hero.x, hero.z);
-            if (w[3] == 0 && Math.abs(d - w[2]) < 1 && hero.onGround()) {
-                w[3] = 1;
-                hurtHero(3, w[0], w[1], false);
+            for (Player p : players) {
+                float d = M.dist(w[0], w[1], p.hero.x, p.hero.z);
+                if (w[3] == 0 && Math.abs(d - w[2]) < 1 && p.hero.onGround()) {
+                    w[3] = 1;
+                    Player was = as(p);
+                    hurtHero(3, w[0], w[1], false);
+                    as(was);
+                }
             }
             if (w[2] > 22) waves.remove(i);
         }
@@ -1038,10 +1446,15 @@ final class Game {
             d.vy -= 18 * dt;
             d.y = Math.max(f, d.y + d.vy * dt);
             if (d.y <= f) d.vy = 0;
-            if (d.item != CONTAINER && (d.life -= dt) <= 0) {
-                drops.remove(i);
-                continue;
-            }
+            if (d.item != CONTAINER && (d.life -= dt) <= 0) drops.remove(i);
+        }
+        collect();
+    }
+
+    /** Picks up whatever drops and island pickups lie under the current hero. */
+    private void collect() {
+        for (int i = drops.size() - 1; i >= 0; i--) {
+            Drop d = drops.get(i);
             if (M.dist(d.x, d.z, hero.x, hero.z) < 1.1f && Math.abs(d.y - hero.y) < 1.8f) {
                 drops.remove(i);
                 story.collect(d.item, null);

@@ -1,0 +1,42 @@
+// The sky dome: day/night gradient, sun and halo, moon, stars and drifting clouds. Its glow pass is the sun alone.
+MaterialDef KestrelSky {
+    MaterialParameters {
+        Color Zenith
+        Color Horizon
+        Vector3 SunDir
+        Float SunVis : 1.0
+        Float Night : 0.0
+        Float Cover : 0.0
+        Float Drift : 0.0
+        Color CloudCol
+        Texture2D Clouds
+        Boolean GlowPass : true
+    }
+    Technique {
+        VertexShader GLSL150 GLSL100 : Shaders/Sky.vert
+        FragmentShader GLSL150 GLSL100 : Shaders/Sky.frag
+        WorldParameters {
+            ViewMatrix
+            ProjectionMatrix
+        }
+        RenderState {
+            FaceCull Off
+            DepthWrite Off
+        }
+    }
+    Technique Glow {
+        VertexShader GLSL150 GLSL100 : Shaders/Sky.vert
+        FragmentShader GLSL150 GLSL100 : Shaders/Sky.frag
+        WorldParameters {
+            ViewMatrix
+            ProjectionMatrix
+        }
+        Defines {
+            GLOW_PASS : GlowPass
+        }
+        RenderState {
+            FaceCull Off
+            DepthWrite Off
+        }
+    }
+}

@@ -103,6 +103,15 @@ final class Mesh {
         return this;
     }
 
+    /** Adds another smooth-shaded mesh to this smooth one, each keeping its own corner normals. */
+    Mesh join(Mesh from) {
+        int at = tris;
+        append(from);
+        vn = Arrays.copyOf(vn, tris * 9);
+        System.arraycopy(from.vn, 0, vn, at * 9, from.tris * 9);
+        return this;
+    }
+
     /** Elliptical tube standing on (x, y, z): radii (rx0, rz0) at the bottom and (rx1, rz1) at the top, both ends capped. */
     Mesh tube(float x, float y, float z, float rx0, float rz0, float rx1, float rz1, float h, int sides, int col) {
         float[][] lo = new float[sides][], hi = new float[sides][];

@@ -51,9 +51,15 @@ final class Audio {
         }
     }
 
+    /** Hears every effect played, so a co-op host can play it for friends too. */
+    java.util.function.IntConsumer echo;
+
     void music(int m) { mode = m; }
 
+    int music() { return mode; }
+
     void sfx(int id) {
+        if (echo != null) echo.accept(id);
         if (!ok) return;
         switch (id) {
             case SWING -> { add(2, 900, 300, .09, .10, 0); add(1, 500, 220, .08, .05, 0); }

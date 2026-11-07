@@ -52,8 +52,16 @@ final class Input implements KeyListener, MouseListener, MouseMotionListener, Fo
         return false;
     }
 
-    /** For scripted tests. */
+    /** For scripted tests, and for the engine window, which delivers its own key and button events. */
     void force(int code, boolean isDown) { set(code, isDown); }
+
+    synchronized void scroll(int clicks) { wheelAcc += clicks; }
+
+    /** Lets go of everything (the window lost focus). */
+    synchronized void release() {
+        java.util.Arrays.fill(down, false);
+        lastX = -1;
+    }
 
 
     private synchronized void set(int code, boolean d) {

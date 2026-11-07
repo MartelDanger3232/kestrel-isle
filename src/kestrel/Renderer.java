@@ -23,6 +23,23 @@ final class Renderer {
     int flashCol = 0xffffff;
     private final float[] cin = new float[9], cout = new float[12];
 
+    /** Where draws go when the graphics card does the drawing (see Engine); this frame then stays empty. */
+    interface Gpu {
+        void mesh(Mesh m, Xf t, int alpha);
+
+        void tri(float ax, float ay, float az, float bx, float by, float bz, float qx, float qy, float qz, int col, int alpha);
+
+        /** A grass blade in its unlit colour; the card lights and shadows it like the ground. */
+        void blade(float ax, float ay, float az, float bx, float by, float bz, float qx, float qy, float qz, int col);
+
+        void point(float x, float y, float z, float size, int col, int alpha);
+
+        void light(float x, float y, float z, int col, float range);
+
+    }
+
+    Gpu gpu;
+
     Renderer(int w, int h) {
         this.w = w;
         this.h = h;
@@ -57,6 +74,8 @@ final class Renderer {
 
     /** Sphere-vs-frustum test (no far plane). */
     boolean visible(float x, float y, float z, float rad) {
+        // Real shadows reach into view from things just off screen, so the card wants a wider net.
+        if (gpu != null) rad += 25;
         float dx = x - cx, dy = y - cy, dz = z - cz;
         float vx = dx * rx + dz * rz, vy = dx * ux + dy * uy + dz * uz, vz = dx * fx + dy * fy + dz * fz;
         return vz > -rad && -vx * cosH + vz * sinH > -rad && vx * cosH + vz * sinH > -rad
@@ -113,6 +132,10 @@ final class Renderer {
 
     /** Draws a mesh; alpha below 256 blends it (no depth write). */
     void mesh(Mesh m, Xf t, int alpha) {
+        if (gpu != null) {
+            gpu.mesh(m, t, alpha);
+            return;
+        }
         float[] a = t.m;
         float ox = a[3] - cx, oy = a[7] - cy, oz = a[11] - cz;
         float m00 = rx * a[0] + rz * a[8], m01 = rx * a[1] + rz * a[9], m02 = rx * a[2] + rz * a[10], m03 = rx * ox + rz * oz;
@@ -156,6 +179,10 @@ final class Renderer {
     /** World-space triangle with an already-lit colour. */
     void worldTri(float ax, float ay, float az, float bx, float by, float bz, float qx, float qy, float qz,
                   int col, boolean two, int alpha) {
+        if (gpu != null) {
+            gpu.tri(ax, ay, az, bx, by, bz, qx, qy, qz, col, alpha);
+            return;
+        }
         ax -= cx; ay -= cy; az -= cz;
         bx -= cx; by -= cy; bz -= cz;
         qx -= cx; qy -= cy; qz -= cz;
@@ -315,8 +342,17 @@ final class Renderer {
         }
     }
 
+    /** A warm light source (fire, torch, lantern, spell); only the graphics card lights the world with them. */
+    void light(float x, float y, float z, int col, float range) {
+        if (gpu != null) gpu.light(x, y, z, col, range);
+    }
+
     /** Camera-facing square of world size {@code size}; alpha 256 is opaque. Unlit but fogged. */
     void point(float x, float y, float z, float size, int col, int alpha) {
+        if (gpu != null) {
+            gpu.point(x, y, z, size, col, alpha);
+            return;
+        }
         float dx = x - cx, dy = y - cy, dz = z - cz;
         float vz = dx * fx + dy * fy + dz * fz;
         if (vz < NEAR) return;

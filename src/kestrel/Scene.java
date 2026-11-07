@@ -11,11 +11,12 @@ final class Scene {
     final WorldView view;
     private final Xf xf = new Xf(), tmp = new Xf();
     private final Map<String, float[]> npcPose = new HashMap<>();
-    private final float[] hilt = new float[TRAIL * 3], tip = new float[TRAIL * 3];
-    private int trailN;
     private float camDist = 6, camTy = Float.NaN, camLift;
     /** Dev screenshots can pull the camera in close. */
     float zoom;
+    /** This frame's rain or snow, 0 to 1 (the graphics card paints it over the frame). */
+    float weather;
+    boolean snowing;
 
     Scene(Game g, Renderer r) {
         this.g = g;
@@ -26,11 +27,12 @@ final class Scene {
     void render(float dt) {
         camera(dt);
         Dungeon d = g.dungeon;
+        boolean gpu = r.gpu != null;
         if (d == null) {
             float rain = g.screen == Game.Screen.TITLE ? 0 : localRain();
             g.climate.apply(r, rain);
             view.terrain();
-            view.props();
+            if (!gpu) view.props();
             view.grass(g.time);
             view.pickups(g.time);
             fieldThings();
@@ -41,12 +43,17 @@ final class Scene {
         }
         for (Foe f : g.foes) if (M.dist(f.x, f.z, r.cx, r.cz) < 200 && r.visible(f.x, f.centerY(), f.z, f.radius() * 3)) f.draw(r, xf, g.time);
         if (d == null && g.screen != Game.Screen.TITLE && g.horse.summoned && r.visible(g.horse.x, g.horse.y + 1.2f, g.horse.z, 2.5f)) g.horse.draw(r, xf);
-        if (g.screen != Game.Screen.TITLE) hero();
-        Hero gh = g.hero;
-        if (gh.st == Hero.State.GLIDE)
-            r.mesh(g.gear.stormcloak ? Models.STORMCLOAK : Models.WINDCLOAK, xf.identity().translate(gh.x, gh.y, gh.z).rotY(gh.yaw).rotZ(M.sin(g.time * 2.3f) * .05f));
+        // Every player's hero (friends' too in co-op), each drawn just as this computer's own is.
+        if (g.screen != Game.Screen.TITLE)
+            for (Game.Player p : g.players) {
+                Game.Player was = g.as(p);
+                hero(p);
+                g.as(was);
+            }
         things();
-        if (d == null) {
+        if (gpu) {
+            // The card has its own sky, ocean and background.
+        } else if (d == null) {
             view.sky(g.climate, g.time);
             view.water(g.time);
         } else {
@@ -55,9 +62,11 @@ final class Scene {
         }
         effects();
         if (d == null && g.drake != null) g.drake.drawStrikes(r, g);
+        weather = 0;
         if (d == null && g.screen != Game.Screen.TITLE) {
-            boolean snowy = g.world.biomeAt(g.hero.x, g.hero.z) == World.SNOW;
-            view.weather(snowy ? .45f + g.climate.rain * .55f : localRain(), snowy, g.time);
+            snowing = g.world.biomeAt(g.hero.x, g.hero.z) == World.SNOW;
+            weather = snowing ? .45f + g.climate.rain * .55f : localRain();
+            if (!gpu) view.weather(weather, snowing, g.time);
         }
     }
 
@@ -147,7 +156,10 @@ final class Scene {
         for (Places.Building b : pl.buildings) {
             if (M.dist(b.x(), b.z(), r.cx, r.cz) > 420 || !r.visible(b.x(), b.y() + 2, b.z(), 6)) continue;
             r.mesh(b.mesh(), xf.identity().translate(b.x(), b.y(), b.z()).rotY(b.yaw()));
-            if (night && (b.mesh() == Models.HOUSE || b.mesh() == Models.SHOP)) r.mesh(b.mesh() == Models.HOUSE ? Models.HOUSE_LIT : Models.SHOP_LIT, xf);
+            if (night && (b.mesh() == Models.HOUSE || b.mesh() == Models.SHOP)) {
+                r.mesh(b.mesh() == Models.HOUSE ? Models.HOUSE_LIT : Models.SHOP_LIT, xf);
+                r.light(b.x(), b.y() + 1.6f, b.z(), 0xffb060, 11);
+            }
             if (b.mesh() == Models.HOUSE && M.dist(b.x(), b.z(), r.cx, r.cz) < 170) smoke(b);
         }
         for (Places.Gate gt : pl.gates) {
@@ -175,12 +187,14 @@ final class Scene {
             if (M.dist(f[0], f[2], r.cx, r.cz) > 300 || !r.visible(f[0], f[1], f[2], 2)) continue;
             r.mesh(Models.FIREPIT, xf.identity().translate(f[0], f[1], f[2]));
             r.mesh(Models.FLAME, xf.identity().translate(f[0], f[1] + .1f, f[2]).rotY(t * 3).scale(.42f, .42f + M.sin(t * 11 + f[0]) * .06f, .42f));
+            r.light(f[0], f[1] + 1.2f, f[2], 0xff8a3a, 14 + M.sin(t * 9 + f[0]) * .6f);
         }
         for (Places.Sign s : pl.signs) r.mesh(Models.SIGN, xf.identity().translate(s.x(), s.y(), s.z()).rotY(s.yaw()));
         for (float[] p : pl.posts) {
             if (M.dist(p[0], p[2], r.cx, r.cz) > 220 || !r.visible(p[0], p[1] + 1.2f, p[2], 1.5f)) continue;
             r.mesh(Models.POST, xf.identity().translate(p[0], p[1], p[2]));
             r.point(p[0], p[1] + 2.5f, p[2], .14f + M.sin(t * 5 + p[0]) * .03f, 0xffd870, 220);
+            if (night) r.light(p[0], p[1] + 2.5f, p[2], 0xffc860, 10);
         }
         for (float[] v : pl.vents) {
             if (M.dist(v[0], v[2], r.cx, r.cz) > 260 || !r.visible(v[0], v[1] + 6, v[2], 9)) continue;
@@ -203,13 +217,13 @@ final class Scene {
             if (M.dist(s[0], s[2], r.cx, r.cz) < 500 && r.visible(s[0], s[1] + 1, s[2], 2.5f)) r.mesh(Models.SHRINE, xf.identity().translate(s[0], s[1], s[2]));
         for (Places.Npc n : pl.npcs) {
             if (M.dist(n.x(), n.z(), r.cx, r.cz) > 160 || !r.visible(n.x(), n.y() + 1, n.z(), 1.5f)) continue;
+            float near = M.dist(n.x(), n.z(), g.hero.x, g.hero.z);
+            boolean talking = g.screen == Game.Screen.DIALOG && near < 4, waving = !talking && n.id().equals("child") && near < 9;
+            float yaw = near < 6 ? M.atan2(g.hero.x - n.x(), g.hero.z - n.z()) : n.yaw();
             float[] pose = npcPose.computeIfAbsent(n.id(), k -> n.rig().newPose());
             n.rig().locomote(pose, n.phase, n.walk, t + n.hx);
-            float near = M.dist(n.x(), n.z(), g.hero.x, g.hero.z);
-            boolean talking = g.screen == Game.Screen.DIALOG && near < 4;
             if (talking) Characters.TALK.apply(t, 1, pose);
-            else if (n.id().equals("child") && near < 9) Characters.WAVE.apply(t, 1, pose);
-            float yaw = near < 6 ? M.atan2(g.hero.x - n.x(), g.hero.z - n.z()) : n.yaw();
+            else if (waving) Characters.WAVE.apply(t, 1, pose);
             n.rig().draw(r, xf.identity().translate(n.x(), n.y(), n.z()).rotY(yaw).scale(n.id().equals("child") ? .78f : 1), pose);
         }
     }
@@ -226,33 +240,61 @@ final class Scene {
 
     // ---- the hero -----------------------------------------------------------------------------
 
-    private void hero() {
+    /** Draws player p's hero (already the current one): body, gear, glider, and the trail of a swing. */
+    private void hero(Game.Player p) {
         Hero h = g.hero;
         Rig R = Arms.dressed(g.gear);
+        if (h.st == Hero.State.GLIDE)
+            r.mesh(g.gear.stormcloak ? Models.STORMCLOAK : Models.WINDCLOAK, xf.identity().translate(h.x, h.y, h.z).rotY(h.yaw).rotZ(M.sin(g.time * 2.3f) * .05f));
+        if (h.st == Hero.State.HOVER || h.aloft == 1) {
+            // The Skyward Gust holding the hero up: three rings of wind wheeling opposite ways, gusts streaming up from below, a pale glow.
+            for (int ring = 0; ring < 3; ring++)
+                for (int i = 0; i < 12; i++) {
+                    float a = i * M.TAU / 12 + g.time * (2.2f + ring * .8f) * (ring == 1 ? -1 : 1), rr = .75f + ring * .22f;
+                    r.point(h.x + M.sin(a) * rr, h.y + .15f + ring * .6f + M.sin(g.time * 3 + i + ring) * .06f, h.z + M.cos(a) * rr, .06f, ring == 1 ? 0xffffff : 0xbfe8ff, 170);
+                }
+            for (int k = 0; k < 8; k++) {
+                float f = (g.time * .8f + k / 8f) % 1, a = k * 1.7f + g.time * 1.3f;
+                r.point(h.x + M.sin(a) * .45f, h.y - 1.8f + f * 2.2f, h.z + M.cos(a) * .45f, .05f + f * .06f, 0xd8f4ff, (int) (210 * (1 - f)));
+            }
+            r.light(h.x, h.y + 1, h.z, 0xbfe8ff, 7);
+        }
+        float[] hilt = p.hilt, tip = p.tip;
+        for (int i = 1; i < p.trailN; i++) {
+            int a = (i - 1) * 3, b = i * 3, alpha = 40 + 120 * i / TRAIL;
+            int col = g.gear.ascended ? 0xffe8a0 : 0xe8f8ff;
+            r.worldTri(hilt[a], hilt[a + 1], hilt[a + 2], tip[a], tip[a + 1], tip[a + 2], tip[b], tip[b + 1], tip[b + 2], col, true, alpha);
+            r.worldTri(hilt[a], hilt[a + 1], hilt[a + 2], tip[b], tip[b + 1], tip[b + 2], hilt[b], hilt[b + 1], hilt[b + 2], col, true, alpha);
+        }
+        if (h.st == Hero.State.CHARGE && h.chargeT > .5f) r.point(tip[0], tip[1], tip[2], .25f + M.sin(g.time * 30) * .05f, 0x9fe8ff, 200);
         boolean flicker = h.invuln > 0 && g.hurtFlash > 0 && ((int) (g.time * 22) & 1) == 0 && h.st != Hero.State.DEAD;
         if (flicker) return;
         xf.identity().translate(h.x, h.y, h.z).rotY(h.yaw);
-        R.draw(r, xf, h.pose);
-        Xf handR = R.xf[R.part("armLR")], handL = R.xf[R.part("armLL")], torso = R.xf[R.part("torso")], head = R.xf[R.part("head")];
         boolean bowMode = g.gear.bow && g.gear.bowOut && h.st != Hero.State.RIDE;
         boolean drawn = !bowMode && (h.swordOutT > 0 || h.st == Hero.State.ATTACK || h.st == Hero.State.CHARGE || h.st == Hero.State.SPIN);
         boolean swinging = h.st == Hero.State.ATTACK || h.st == Hero.State.SPIN;
+        R.draw(r, xf, h.pose);
+        Xf handR = R.xf[R.part("armLR")], handL = R.xf[R.part("armLL")], torso = R.xf[R.part("torso")], head = R.xf[R.part("head")];
         if (g.gear.sword) {
-            if (drawn) tmp.set(handR).translate(0, -.27f, 0).rotX(M.PI / 2 - .35f);
-            else tmp.set(torso).translate(.14f, .42f, -.17f).rotZ(-.55f).rotX(M.PI / 2 + .25f);
+            // Between swings a drawn blade points ahead rather than into the ground, and long ones ride higher and
+            // more slanted on the back, so their tips stay clear of it.
+            float held = swinging || h.st == Hero.State.CHARGE ? M.PI / 2 - .35f : -.3f;
+            boolean big = Arms.TIP[g.gear.weapon] > 1.3f;
+            if (drawn) tmp.set(handR).translate(0, -.27f, 0).rotX(held);
+            else tmp.set(torso).translate(.14f, big ? .62f : .42f, -.17f).rotZ(big ? -.85f : -.55f).rotX(M.PI / 2 + .25f);
             r.mesh(Arms.MESH[g.gear.weapon], tmp);
             if (g.gear.weapon == Arms.FANGS && drawn && !h.blocking)
-                r.mesh(Characters.FANG, new Xf().set(handL).translate(0, -.27f, 0).rotX(M.PI / 2 - .35f));
+                r.mesh(Characters.FANG, new Xf().set(handL).translate(0, -.27f, 0).rotX(held));
             if (swinging) {
-                if (trailN == TRAIL) {
+                if (p.trailN == TRAIL) {
                     System.arraycopy(hilt, 3, hilt, 0, (TRAIL - 1) * 3);
                     System.arraycopy(tip, 3, tip, 0, (TRAIL - 1) * 3);
-                    trailN--;
+                    p.trailN--;
                 }
-                apply(tmp, 0, 0, .25f, hilt, trailN);
-                apply(tmp, 0, 0, Arms.TIP[g.gear.weapon], tip, trailN);
-                trailN++;
-            } else trailN = Math.max(0, trailN - 2);
+                apply(tmp, 0, 0, .25f, hilt, p.trailN);
+                apply(tmp, 0, 0, Arms.TIP[g.gear.weapon], tip, p.trailN);
+                p.trailN++;
+            } else p.trailN = Math.max(0, p.trailN - 2);
         }
         if (g.gear.shield) {
             if (h.blocking) tmp.set(xf).translate(-.08f, 1.12f, .45f).rotX(M.PI / 2);
@@ -295,8 +337,9 @@ final class Scene {
         if (h.st == Hero.State.DRINK) r.mesh(Characters.DRAUGHT, tmp.set(handR).translate(0, -.3f, .05f));
         if (h.st == Hero.State.CAST) {
             tmp.set(handR).translate(0, -.3f, 0);
-            int[] glow = {0xff9a3a, 0xbff0ff, 0xffe85a, 0x7af0d0, 0xfff0b0};
+            int[] glow = {0xff9a3a, 0xbff0ff, 0xffe85a, 0x7af0d0, 0xfff0b0, 0xd8f4ff};
             r.point(tmp.m[3], tmp.m[7], tmp.m[11], .16f + M.sin(g.time * 40) * .03f, glow[g.gear.spell], 256);
+            r.light(tmp.m[3], tmp.m[7], tmp.m[11], glow[g.gear.spell], 7);
         }
         if (g.shownItem != null) r.mesh(g.shownItem, tmp.identity().translate(h.x, h.y + 2.35f + M.sin(g.time * 3) * .05f, h.z).rotY(g.time * 1.5f));
     }
@@ -325,6 +368,8 @@ final class Scene {
                 case Game.P_RADIANT -> Characters.RADIANT;
                 default -> Models.ROCK_SHOT;
             }, s.kind == Game.ARROW || s.kind == Game.P_FROST || s.kind == Game.P_RADIANT ? xf : xf.rotZ(t * 8));
+            if (s.kind == Game.FIREBALL || s.kind == Game.P_EMBER || s.kind == Game.LANTERN) r.light(s.x, s.y, s.z, 0xff8a3a, 9);
+            else if (s.kind == Game.P_FROST || s.kind == Game.P_RADIANT) r.light(s.x, s.y, s.z, s.kind == Game.P_FROST ? 0x9fe8ff : 0xfff0b0, 8);
         }
         for (float[] st : g.magic.stars) {
             if (st[3] <= 0) r.mesh(Characters.STAR, xf.identity().translate(st[0], st[1], st[2]).rotY(t * 4));
@@ -387,13 +432,6 @@ final class Scene {
                 float a = i * M.TAU / 40, x = w[0] + M.sin(a) * w[2], z = w[1] + M.cos(a) * w[2];
                 r.point(x, g.level.floor(x, z) + .4f, z, .35f, 0xff8a3a, 210);
             }
-        for (int i = 1; i < trailN; i++) {
-            int a = (i - 1) * 3, b = i * 3, alpha = 40 + 120 * i / TRAIL;
-            int col = g.gear.ascended ? 0xffe8a0 : 0xe8f8ff;
-            r.worldTri(hilt[a], hilt[a + 1], hilt[a + 2], tip[a], tip[a + 1], tip[a + 2], tip[b], tip[b + 1], tip[b + 2], col, true, alpha);
-            r.worldTri(hilt[a], hilt[a + 1], hilt[a + 2], tip[b], tip[b + 1], tip[b + 2], hilt[b], hilt[b + 1], hilt[b + 2], col, true, alpha);
-        }
-        if (h.st == Hero.State.CHARGE && h.chargeT > .5f) r.point(tip[0], tip[1], tip[2], .25f + M.sin(g.time * 30) * .05f, 0x9fe8ff, 200);
         float[] goal = new float[3];
         if (g.dungeon == null && g.screen == Game.Screen.PLAY && g.story.objectiveTarget(goal) && M.dist(h.x, h.z, goal[0], goal[2]) > 18)
             r.mesh(Models.BEACON, xf.identity().translate(goal[0], g.world.height(goal[0], goal[2]), goal[2]), 55);
@@ -411,6 +449,7 @@ final class Scene {
 
     /** Soft round shadow on whatever floor is below. */
     private void shadow(float x, float z, float rad, float y) {
+        if (r.gpu != null) return; // the card casts real shadows
         float f = g.level.floor(x, z);
         if (f < -20) return;
         int a = (int) (100 * M.clamp(1 - (y - f) / 12, 0, 1));

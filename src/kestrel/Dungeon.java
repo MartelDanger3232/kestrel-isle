@@ -537,6 +537,7 @@ final class Dungeon implements Level {
                     if (t.on) {
                         xf.identity().translate(t.x, t.y + 1.45f, t.z).rotY(time * 3).scale(.3f, .3f + M.sin(time * 13 + t.i) * .05f, .3f);
                         r.mesh(Models.FLAME, xf);
+                        r.light(t.x, t.y + 1.6f, t.z, 0xff9a40, 11 + M.sin(time * 11 + t.i) * .5f);
                     }
                 }
                 case 'r' -> {
@@ -547,7 +548,10 @@ final class Dungeon implements Level {
                     xf.identity().translate(t.x, t.y, t.z);
                     r.mesh(Models.SUN_PEDESTAL, xf);
                     r.mesh(t.on ? Models.SUN_CRYSTAL_ON : Models.SUN_CRYSTAL_OFF, xf.identity().translate(t.x, t.y + 1.3f + M.sin(time * 2 + t.i) * .06f, t.z).rotY(time * .8f));
-                    if (t.on) r.point(t.x, t.y + 1.3f, t.z, .9f + M.sin(time * 9) * .1f, 0xffd870, 70);
+                    if (t.on) {
+                        r.point(t.x, t.y + 1.3f, t.z, .9f + M.sin(time * 9) * .1f, 0xffd870, 70);
+                        r.light(t.x, t.y + 1.3f, t.z, 0xffd870, 10);
+                    }
                 }
                 case 'Y' -> {
                     r.mesh(Models.SUN_DISC, xf.identity().translate(t.x, t.y, t.z));
@@ -570,6 +574,7 @@ final class Dungeon implements Level {
                     xf.identity().translate(t.x, t.y, t.z);
                     r.mesh(Models.POST, xf);
                     r.point(t.x, t.y + 2.5f, t.z, .12f + M.sin(time * 5) * .03f, 0xffd870, 220);
+                    r.light(t.x, t.y + 2.5f, t.z, 0xffc860, 9);
                 }
                 case 'u' -> {
                     xf.identity().translate(t.x, t.y, t.z);

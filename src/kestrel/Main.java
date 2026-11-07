@@ -24,14 +24,22 @@ public final class Main {
     private Main() {}
 
     public static void main(String[] args) throws Exception {
-        boolean windowed = false;
+        boolean windowed = false, classic = false;
         int res = 360;
         float autoquit = 0;
+        File gpuShots = null;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--dev-window" -> windowed = true;
+                case "--classic" -> classic = true;
                 case "--res" -> res = Integer.parseInt(args[++i]);
                 case "--autoquit" -> autoquit = Float.parseFloat(args[++i]);
+                case "--gpu-shots" -> gpuShots = new File(args[++i]);
+                case "--host" -> Coop.autoHost = true;
+                case "--join" -> Coop.autoJoin = args[++i];
+                case "--name" -> System.setProperty("kestrel.name", args[++i]);
+                case "--bot" -> Engine.bot = true;
+                case "--snap" -> Engine.snap = new File(args[++i]);
                 case "--shots" -> {
                     Dev.shots(new File(args[++i]));
                     return;
@@ -51,6 +59,8 @@ public final class Main {
                 default -> {}
             }
         }
+        // -Dkestrel.save=FILE plays from another save (testing co-op with two copies on one computer).
+        if (System.getProperty("kestrel.save") != null) Story.SAVE = java.nio.file.Path.of(System.getProperty("kestrel.save"));
         // Saves used to sit beside the game; carry an old one over to the per-user folder the first time.
         java.nio.file.Path old = java.nio.file.Path.of("save.properties");
         try {
@@ -61,7 +71,31 @@ public final class Main {
         } catch (java.io.IOException e) {
             System.err.println("Couldn't move the old save: " + e.getMessage());
         }
-        play(windowed, res, autoquit);
+        // The software renderer stays as a fallback for old machines: --classic.
+        if (classic) play(windowed, res, autoquit);
+        else if (!relaunch(args)) Engine.play(windowed, autoquit, gpuShots);
+    }
+
+    /**
+     * The graphics library needs Java flags the packaged app always passes: on a Mac its window must own the process's
+     * first thread, and newer Javas want permission for its low-level memory access. A plain {@code java -jar} has
+     * neither, so this starts the game again with them; true once that copy has exited.
+     */
+    private static boolean relaunch(String[] args) throws Exception {
+        if (System.getProperty("jpackage.app-path") != null || Boolean.getBoolean("kestrel.relaunched")) return false;
+        java.util.List<String> jvm = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments(), add = new java.util.ArrayList<>();
+        if (System.getProperty("os.name").startsWith("Mac") && !"1".equals(System.getenv("JAVA_STARTED_ON_FIRST_THREAD_" + ProcessHandle.current().pid())))
+            add.add("-XstartOnFirstThread");
+        if (Runtime.version().feature() >= 23 && jvm.stream().noneMatch(a -> a.startsWith("--sun-misc-unsafe-memory-access")))
+            add.add("--sun-misc-unsafe-memory-access=allow");
+        if (add.isEmpty()) return false;
+        java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of(java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString()));
+        cmd.addAll(add);
+        cmd.addAll(jvm);
+        cmd.addAll(java.util.List.of("--enable-native-access=ALL-UNNAMED", "-Dkestrel.relaunched=true", "-cp", System.getProperty("java.class.path"), Main.class.getName()));
+        cmd.addAll(java.util.Arrays.asList(args));
+        System.exit(new ProcessBuilder(cmd).inheritIO().start().waitFor());
+        return true;
     }
 
     /** The canvas centre in screen coordinates, or null while it isn't on screen. */

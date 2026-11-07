@@ -57,19 +57,35 @@ final class Story {
 
     boolean hasSave() { return Files.exists(SAVE); }
 
+    /** The title screen's choices; co-op hosting carries on this save (or starts one). */
+    String[] titleOptions() {
+        return hasSave() ? new String[]{"New Game", "Continue", "Host co-op", "Join co-op"} : new String[]{"New Game", "Host co-op", "Join co-op"};
+    }
+
     void titleScreen() {
         g.climate.update(1 / 60f);
-        int n = hasSave() ? 2 : 1;
-        if (g.in.any(KeyEvent.VK_W, KeyEvent.VK_UP, KeyEvent.VK_S, KeyEvent.VK_DOWN)) titleSel = (titleSel + 1) % n;
+        String[] opts = titleOptions();
+        int n = opts.length;
+        if (g.in.any(KeyEvent.VK_W, KeyEvent.VK_UP)) titleSel = (titleSel + n - 1) % n;
+        if (g.in.any(KeyEvent.VK_S, KeyEvent.VK_DOWN)) titleSel = (titleSel + 1) % n;
+        titleSel = Math.min(titleSel, n - 1);
         if (!g.in.any(KeyEvent.VK_ENTER, KeyEvent.VK_SPACE, KeyEvent.VK_E)) return;
+        String pick = opts[titleSel];
+        if (pick.equals("Join co-op")) {
+            g.screen = Game.Screen.JOIN;
+            g.joinAddress.setLength(0);
+            g.joinAddress.append(Coop.lastAddress());
+            return;
+        }
         g.screen = Game.Screen.PLAY;
-        if (titleSel == 1) load();
+        if (pick.equals("Continue") || pick.equals("Host co-op") && hasSave()) load();
         else {
             g.camYaw = M.atan2(g.world.places.npcs.get(0).x() - g.hero.x, g.world.places.npcs.get(0).z() - g.hero.z);
             g.hero.yaw = g.camYaw;
             g.say("Brindle village. Find Elder Maren (walk up and press E).");
         }
         g.audio.music(Audio.VILLAGE);
+        if (pick.equals("Host co-op")) Coop.host(g);
     }
 
     // ---- people and places --------------------------------------------------------------------
@@ -679,7 +695,8 @@ final class Story {
             }
             case "windcloak" -> {
                 gear.windcloak = true;
-                g.itemGet(Models.WINDCLOAK, "Windcloak", "Wren's glider! While falling, press Space to open it and glide; steer with the movement keys, and Space again folds it. Warm air rising off vents and campfires lifts you (stand in it and press Space). Gliding uses stamina.", this::save);
+                gear.spells |= 1 << Magic.GUST;
+                g.itemGet(Models.WINDCLOAK, "Windcloak", "Wren's glider! While falling, press Space to open it and glide; steer with the movement keys, and Space again folds it. Warm air rising off vents and campfires lifts you (stand in it and press Space). Gliding uses stamina. Its wind taught you a spell too: Skyward Gust throws you into the sky from anywhere (V to select it, C to cast, then Space).", this::save);
             }
             case "ore" -> {
                 if (quest(2) != 3) setQuest(2, 2);
@@ -1189,6 +1206,7 @@ final class Story {
             }
             default -> {
                 gear.windcloak = gear.sunRelic = true;
+                gear.spells |= 1 << Magic.GUST;
                 if (quest(4) <= 1) setQuest(4, 2);
             }
         }
@@ -1410,6 +1428,15 @@ final class Story {
 
     // ---- saving -------------------------------------------------------------------------------
 
+    /** After co-op: this save keeps its own story and place, and takes home the gear gathered on a friend's island. */
+    void keepGear(Game.Gear coop) {
+        Game.Gear brought = new Game.Gear();
+        Sync.copy(coop, brought);
+        if (hasSave()) load();
+        Sync.copy(brought, g.gear);
+        save();
+    }
+
     void save() {
         if (!saving) return;
         Properties p = new Properties();
@@ -1488,6 +1515,8 @@ final class Story {
                 gr.windcloak = n[31] == 1;
                 gr.stormcloak = n[32] == 1;
                 gr.sunRelic = n[33] == 1;
+                // Saves from before the Skyward Gust existed: the glider brings it.
+                if (gr.windcloak) gr.spells |= 1 << Magic.GUST;
             }
             if (n.length >= 40) {
                 gr.weapon = n[34];

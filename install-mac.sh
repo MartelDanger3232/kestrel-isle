@@ -1,6 +1,8 @@
 #!/bin/bash
 # Installs (or updates) Kestrel Isle on an Apple Silicon Mac, then opens it.
 #   curl -fsSL https://raw.githubusercontent.com/MartelDanger3232/kestrel-isle/main/install-mac.sh | bash
+# Anything after "bash -s --" goes to the game, so a friend can be sent straight to your island:
+#   curl -fsSL https://raw.githubusercontent.com/MartelDanger3232/kestrel-isle/main/install-mac.sh | bash -s -- --join ADDRESS
 # Downloading with curl rather than a browser means macOS doesn't block the un-notarized app.
 set -e
 url=https://github.com/MartelDanger3232/kestrel-isle/releases/latest/download/KestrelIsle-Mac-AppleSilicon.zip
@@ -17,4 +19,4 @@ rm -rf ~/Applications/"Kestrel Isle.app"
 ditto -x -k /tmp/KestrelIsle.zip ~/Applications
 rm -f /tmp/KestrelIsle.zip
 echo "Installed in your Applications folder (~/Applications). Opening it now; next time, open it from Launchpad."
-open ~/Applications/"Kestrel Isle.app"
+open ~/Applications/"Kestrel Isle.app" --args "$@"

@@ -12,7 +12,7 @@ import javax.imageio.ImageIO;
 final class Dev {
     private Dev() {}
 
-    private static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night", "glide", "temple", "drake", "gear", "attire"};
+    static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night", "glide", "temple", "drake", "gear", "attire", "duel"};
 
     static void shots(File dir) throws Exception {
         Story.saving = false;
@@ -42,7 +42,7 @@ final class Dev {
     }
 
     /** Poses a fresh game for screenshot i. */
-    private static void setup(Game g, int i) {
+    static void setup(Game g, int i) {
         Hero h = g.hero;
         Places pl = g.world.places;
         g.gear.sword = g.gear.shield = g.gear.flute = g.gear.bow = true;
@@ -50,7 +50,7 @@ final class Dev {
         g.gear.arrows = 20;
         g.time = 40 + i;
         g.screen = i == 0 ? Game.Screen.TITLE : Game.Screen.PLAY;
-        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f, 16, 12, 15, 10, 15.5f}[i];
+        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f, 16, 12, 15, 10, 15.5f, 11}[i];
         g.climate.update(0);
         switch (i) {
             case 0 -> {}
@@ -229,6 +229,31 @@ final class Dev {
                 g.screen = Game.Screen.GEAR;
                 g.gearCol = 0;
                 g.gearRow = Arms.GREATSWORD;
+            }
+            case 17 -> {
+                // Two duellists: Wren below with a greatsword drawn, the hero above on the Skyward Gust's wind with one sheathed.
+                g.story.flags.add("intro");
+                float x = pl.villageX + 40, z = pl.villageZ + 70, y = g.world.height(x, z);
+                Game.Player wren = new Game.Player(new Hero(x + 1.5f, y, z + 5), new Game.Gear(), new Input(), "Wren");
+                wren.id = 1;
+                wren.gear.sword = true;
+                wren.gear.weapons = 31;
+                wren.gear.weapon = Arms.GREATSWORD;
+                wren.hero.swordOutT = 3;
+                wren.hero.yaw = M.PI;
+                wren.hero.dueling = h.dueling = true;
+                g.players.add(wren);
+                g.gear.windcloak = true;
+                g.gear.weapons = 31;
+                g.gear.weapon = Arms.GREATSWORD;
+                h.place(x, y, z);
+                h.yaw = 0;
+                h.launch(26, 0);
+                h.hoverNext = true;
+                pump(g, 1.6f);
+                wren.hero.swordOutT = 3;
+                g.camYaw = .5f;
+                g.camPitch = -.5f;
             }
             case 16 -> {
                 g.story.flags.add("intro");
@@ -772,6 +797,188 @@ final class Dev {
         }
     }
 
+    private static void gustTests(Game g, Input in) {
+        Hero h = g.hero;
+        Places pl = g.world.places;
+        g.screen = Game.Screen.PLAY;
+        g.foes.clear();
+        g.gear.windcloak = true;
+        g.gear.spells |= 1 << Magic.GUST;
+        g.gear.spell = Magic.GUST;
+        float x = pl.villageX + 30, z = pl.villageZ + 60, ground = g.world.height(x, z);
+        h.place(x, ground, z);
+        h.fp = h.maxFp;
+        h.hp = h.maxHp;
+        h.stamina = h.maxStamina;
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_C);
+        float top = 0;
+        for (int i = 0; i < 60; i++) {
+            run(g, 1 / 60f);
+            top = Math.max(top, h.y - g.level.floor(h.x, h.z));
+        }
+        check(top > 9, "Skyward Gust throws the hero high into the sky from flat ground (" + Math.round(top) + " m)");
+        tap(g, in, KeyEvent.VK_SPACE);
+        check(h.st == Hero.State.GLIDE, "Space opens the glider up there");
+        for (int i = 0; i < 600 && h.st != Hero.State.MOVE; i++) {
+            if (h.st == Hero.State.GLIDE && i == 300) tap(g, in, KeyEvent.VK_SPACE);
+            run(g, 1 / 60f);
+        }
+        check(h.st == Hero.State.MOVE && h.hp == h.maxHp, "and the hero lands unhurt (" + h.st + ", " + h.hp + "/" + h.maxHp + " hp)");
+    }
+
+    /** Co-op without a network: a friend's hero driven by their own keys, foes choosing between heroes, and the world copied to a friend. */
+    private static void coopTests(Game g, Input in) throws java.io.IOException {
+        Places pl = g.world.places;
+        g.screen = Game.Screen.PLAY;
+        g.foes.clear();
+        float x = pl.villageX + 40, z = pl.villageZ + 70, y = g.world.height(x, z);
+        g.hero.place(x, y, z);
+        Game.Player friend = new Game.Player(new Hero(x + 3, y, z), new Game.Gear(), new Input(), "Friend");
+        friend.gear.sword = true;
+        friend.id = 1;
+        g.players.add(friend);
+        friend.camYaw = 0;
+        float z0 = friend.hero.z;
+        friend.in.force(KeyEvent.VK_W, true);
+        run(g, 1);
+        friend.in.force(KeyEvent.VK_W, false);
+        check(friend.hero.z - z0 > 3 && M.dist(g.hero.x, g.hero.z, x, z) < .5f, "a friend's own keys move only their hero (" + Math.round(friend.hero.z - z0) + " m)");
+        // Somewhere level with the friend, about 10 m off (wolves only hunt what's on their own level).
+        float wx = friend.hero.x + 10, wz = friend.hero.z;
+        for (int k = 0; k < 16 && Math.abs(g.world.height(wx, wz) - friend.hero.y) > 1; k++) {
+            wx = friend.hero.x + M.sin(k * .4f) * 10;
+            wz = friend.hero.z + M.cos(k * .4f) * 10;
+        }
+        Foe wolf = new Foe(Foe.Kind.WOLF, wx, g.world.height(wx, wz), wz);
+        wolf.yaw = M.atan2(friend.hero.x - wolf.x, friend.hero.z - wolf.z);
+        g.foes.add(wolf);
+        g.hero.place(x - 60, g.world.height(x - 60, z), z);
+        float closest = Float.MAX_VALUE;
+        for (int i = 0; i < 360; i++) {
+            run(g, 1 / 60f);
+            closest = Math.min(closest, M.dist(wolf.x, wolf.z, friend.hero.x, friend.hero.z));
+        }
+        check(closest < 2.5f || friend.hero.hp < friend.hero.maxHp, "a wolf hunts the friend it is nearest to (closest " + Math.round(closest) + " m)");
+        Game copy = new Game(new Input(), new Audio(false));
+        copy.screen = Game.Screen.PLAY;
+        Coop.mirror(g, copy);
+        Game.Player seen = null;
+        for (Game.Player p : copy.players) if (p.id == 1) seen = p;
+        boolean same = seen != null && M.dist(seen.hero.x, seen.hero.z, friend.hero.x, friend.hero.z) < .01f && copy.foes.size() == g.foes.size();
+        for (int i = 0; same && i < g.foes.size(); i++) same = M.dist(copy.foes.get(i).x, copy.foes.get(i).z, g.foes.get(i).x, g.foes.get(i).z) < .01f;
+        check(same, "a friend's game sees every hero and foe where the host has them (" + copy.players.size() + " players, " + copy.foes.size() + " foes)");
+        g.players.remove(friend);
+        g.foes.clear();
+    }
+
+    /** Shift locks on only to someone; duellists fight (blocks, parries, a friendly end); a locked-on Gust hovers until an attack spell. */
+    private static void duelTests(Game g, Input in) {
+        Hero h = g.hero;
+        Places pl = g.world.places;
+        g.screen = Game.Screen.PLAY;
+        g.foes.clear();
+        float x = pl.villageX + 40, z = pl.villageZ + 70;
+        h.place(x, g.world.height(x, z), z);
+        h.hp = h.maxHp;
+        h.invuln = 0;
+        in.force(KeyEvent.VK_SHIFT, true);
+        run(g, .1f);
+        check(!h.locked, "Shift with nobody around locks on to nothing");
+        in.force(KeyEvent.VK_SHIFT, false);
+        run(g, .1f);
+
+        Game.Player friend = new Game.Player(new Hero(x, h.y, z + 1.6f), new Game.Gear(), new Input(), "Friend");
+        friend.id = 1;
+        friend.gear.shield = friend.gear.sword = true;
+        g.players.add(friend);
+        Hero f = friend.hero;
+        f.yaw = M.PI;
+        h.yaw = 0;
+        run(g, .05f);
+        int hp0 = f.hp;
+        g.swordStrike(h, 150, 2.4f, 1);
+        check(f.hp == hp0, "a sword can't hurt a friend who isn't duelling");
+        h.dueling = f.dueling = true;
+        in.force(KeyEvent.VK_SHIFT, true);
+        run(g, .1f);
+        check(h.locked && h.rival == f, "two duellists can lock on to each other");
+        in.force(KeyEvent.VK_SHIFT, false);
+        g.swordStrike(h, 150, 2.4f, 1);
+        check(f.hp < hp0, "a duellist's sword wounds the other (" + hp0 + " to " + f.hp + " hp)");
+        run(g, .6f);
+        f.place(x, h.y, z + 1.6f);
+        f.yaw = M.PI;
+        h.yaw = 0;
+        f.invuln = 0;
+        friend.in.force(KeyEvent.VK_K, true);
+        run(g, 1 / 60f);
+        g.swordStrike(h, 150, 2.4f, 1);
+        friend.in.force(KeyEvent.VK_K, false);
+        check(h.st == Hero.State.HURT, "a parried duellist reels back");
+        run(g, .5f);
+        f.invuln = 0;
+        f.hp = 2;
+        f.setState(Hero.State.MOVE);
+        h.yaw = M.atan2(f.x - h.x, f.z - h.z);
+        g.swordStrike(h, 150, 2.4f, 3);
+        check(f.hp == 1 && f.st != Hero.State.DEAD && !f.dueling && !h.dueling, "a duel ends at the last heart, with nobody killed");
+        g.players.remove(friend);
+
+        // A locked-on Skyward Gust: hang in the air, then an Ember Bolt lets go.
+        Foe mark = new Foe(Foe.Kind.WOLF, h.x, g.world.height(h.x, h.z + 9), h.z + 9);
+        mark.frozenT = 99;
+        g.foes.add(mark);
+        h.place(x, g.world.height(x, z), z);
+        h.yaw = g.camYaw = 0;
+        h.fp = h.maxFp;
+        g.gear.windcloak = true;
+        g.gear.spells |= 1 << Magic.GUST | 1 << Magic.EMBER;
+        g.gear.spell = Magic.GUST;
+        in.force(KeyEvent.VK_SHIFT, true);
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_C);
+        run(g, 3);
+        float high = h.y - g.level.floor(h.x, h.z);
+        check(h.st == Hero.State.HOVER && high > 8, "a Skyward Gust cast while locked on hangs in the air (" + h.st + ", " + Math.round(high) + " m up)");
+        g.gear.spell = Magic.EMBER;
+        h.fp = h.maxFp;
+        tap(g, in, KeyEvent.VK_C);
+        run(g, 1);
+        in.force(KeyEvent.VK_SHIFT, false);
+        check(h.st == Hero.State.AIR || h.st == Hero.State.MOVE || h.st == Hero.State.GLIDE, "an attack spell from up there lets the wind go (" + h.st + ")");
+        run(g, 2);
+        g.foes.clear();
+    }
+
+    private static void devTests(Game g, Input in) {
+        g.screen = Game.Screen.PLAY;
+        g.gear.outfits = 1;
+        g.gear.songs = 0;
+        tap(g, in, KeyEvent.VK_OPEN_BRACKET);
+        check(g.screen == Game.Screen.DEV, "[ opens the dev pack");
+        // Drawing it must not throw; -Dkestrel.devshot=FILE keeps the frame to look at.
+        BufferedImage frame = new BufferedImage(1280, 720, BufferedImage.TYPE_INT_RGB);
+        new Hud(g, new Renderer(640, 360)).draw(frame.createGraphics(), 1280, 720);
+        String shot = System.getProperty("kestrel.devshot");
+        if (shot != null) {
+            try {
+                ImageIO.write(frame, "png", new File(shot));
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+        tap(g, in, KeyEvent.VK_D);
+        tap(g, in, KeyEvent.VK_S);
+        tap(g, in, KeyEvent.VK_E);
+        check(g.owns(1, 1), "the dev pack puts the chosen outfit in the inventory");
+        for (int t = 0; t < 3; t++) tap(g, in, KeyEvent.VK_D);
+        tap(g, in, KeyEvent.VK_F);
+        check(g.gear.songs == (1 << Story.SONG_NAMES.length) - 1, "F takes every song in the tab at once");
+        tap(g, in, KeyEvent.VK_OPEN_BRACKET);
+        check(g.screen == Game.Screen.PLAY, "[ closes the dev pack");
+    }
+
     private static void tap(Game g, Input in, int key) {
         in.force(key, true);
         run(g, 1 / 60f);
@@ -1108,6 +1315,14 @@ final class Dev {
         northTests(g, in);
         skyTests(g, in);
         armsTests(g, in);
+        gustTests(g, in);
+        duelTests(g, in);
+        devTests(g, in);
+        try {
+            coopTests(g, in);
+        } catch (java.io.IOException e) {
+            check(false, "co-op world copy: " + e);
+        }
 
         Game fresh = new Game(in, new Audio(false));
         fresh.screen = Game.Screen.PLAY;

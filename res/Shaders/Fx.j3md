@@ -1,0 +1,45 @@
+// Unlit, vertex-coloured faces that light themselves: fire, crystals, eyes, sparks and trails. Fogged like
+// everything else, and in the glow pass anything brighter than GlowFrom feeds the bloom.
+MaterialDef KestrelFx {
+    MaterialParameters {
+        Texture2D ColorMap
+        Float Alpha : 1.0
+        Float GlowFrom : -1.0
+        Float GlowPower : 1.0
+        Boolean GlowPass : true
+        Boolean UseFog
+        Color FogColor
+        Vector2 LinearFog
+        Float ExpFog
+        Float ExpSqFog
+    }
+    Technique {
+        VertexShader GLSL150 GLSL100 : Shaders/Fx.vert
+        FragmentShader GLSL150 GLSL100 : Shaders/Fx.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+            WorldMatrix
+            CameraPosition
+        }
+        Defines {
+            HAS_COLORMAP : ColorMap
+            USE_FOG : UseFog
+            FOG_LINEAR : LinearFog
+            FOG_EXP : ExpFog
+            FOG_EXPSQ : ExpSqFog
+        }
+    }
+    Technique Glow {
+        VertexShader GLSL150 GLSL100 : Shaders/Fx.vert
+        FragmentShader GLSL150 GLSL100 : Shaders/Fx.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+            WorldMatrix
+            CameraPosition
+        }
+        Defines {
+            HAS_COLORMAP : ColorMap
+            GLOW_PASS : GlowPass
+        }
+    }
+}

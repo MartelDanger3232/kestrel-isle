@@ -12,7 +12,17 @@ final class Characters {
      */
     static Rig humanoid(int skin, int hair, int top, int bottom, int boots, Mesh headExtra, Mesh torsoExtra, boolean cape, int capeCol) {
         int skinShade = M.scale(skin, .82f), hairShade = M.scale(hair, .75f);
-        Mesh hips = new Mesh().tube(0, -.18f, 0, .205f, .14f, .17f, .115f, .2f, 12, top)
+        // On the graphics card the body is the Blender sculpt, painted in this character's colours (zones as in Sculpts).
+        int[] paint = {skin, skinShade, hair, hairShade, top, M.scale(top, .78f), bottom, boots, M.scale(boots, .78f), 0x3a2a1e, 0xc8a050,
+                0x231c18, 0xf4f0e8, 0x8a4a3a};
+        Mesh hips = Sculpts.part("hips", paint);
+        if (hips != null) {
+            Mesh torso = Sculpts.part("torso", paint), head = Sculpts.part("head", paint);
+            if (torsoExtra != null) torso.join(torsoExtra.smooth());
+            if (headExtra != null) head.join(headExtra.smooth());
+            return rig(hips, torso, head, Sculpts.part("armU", paint), Sculpts.part("armL", paint), Sculpts.part("legU", paint), Sculpts.part("legL", paint), cape, capeCol);
+        }
+        hips = new Mesh().tube(0, -.18f, 0, .205f, .14f, .17f, .115f, .2f, 12, top)
                 .tube(0, -.015f, 0, .175f, .12f, .175f, .12f, .065f, 12, 0x3a2a1e)
                 .box(0, .018f, .121f, .035f, .028f, .008f, 0xc8a050).smooth();
         Mesh torso = new Mesh().tube(0, 0, 0, .165f, .105f, .205f, .125f, .36f, 12, top)
@@ -38,6 +48,11 @@ final class Characters {
         Mesh legL = new Mesh().blob(0, 0, .005f, .066f, .06f, .07f, 2, 8, bottom, 0).tube(0, -.33f, 0, .054f, .057f, .066f, .068f, .33f, 8, bottom)
                 .tube(0, -.46f, .012f, .07f, .078f, .068f, .074f, .16f, 8, boots).blob(0, -.435f, .1f, .064f, .046f, .1f, 2, 8, boots, 0)
                 .tube(0, -.32f, .005f, .074f, .08f, .074f, .08f, .035f, 8, M.scale(boots, .8f)).smooth();
+        return rig(hips, torso, head, armU, armL, legU, legL, cape, capeCol);
+    }
+
+    /** Hangs body parts on the humanoid skeleton, with a two-piece cape if wanted. */
+    private static Rig rig(Mesh hips, Mesh torso, Mesh head, Mesh armU, Mesh armL, Mesh legU, Mesh legL, boolean cape, int capeCol) {
         Object[] base = {"hips", null, 0, .9f, 0, hips, "torso", "hips", 0, .06f, 0, torso, "head", "torso", 0, .5f, 0, head,
                 "armUL", "torso", -.25f, .44f, 0, armU, "armLL", "armUL", 0, -.28f, 0, armL,
                 "armUR", "torso", .25f, .44f, 0, armU, "armLR", "armUR", 0, -.28f, 0, armL,
@@ -126,6 +141,10 @@ final class Characters {
     static final Rig.Clip H_LEDGE = new Rig.Clip(HERO, false, 0, "armUL:-2.8 armUR:-2.8 legUL:-1 legLL:1.3 root:-.5", .25f,
             "armUL:-1.2 armUR:-1.2 torso:.7 legUL:-1.4 legLL:1.7 legUR:-.4 legLR:.6 root:-.3", .45f, "torso:.2 legUL:-.4 legLL:.5 root:-.05");
     static final Rig.Clip H_GLIDE = new Rig.Clip(HERO, true, 0, "armUL:-2.75,0,-.35 armUR:-2.75,0,.35 armLL:-.25 armLR:-.25 legUL:.15 legLL:.35 legUR:-.1 legLR:.25 torso:-.08");
+    /** Held aloft by the Skyward Gust: arms spread on the wind, legs trailing, breathing slowly up and down. */
+    static final Rig.Clip H_HOVER = new Rig.Clip(HERO, true, 0, "armUL:-.35,0,-1.15 armUR:-.35,0,1.15 armLL:-.35 armLR:-.35 legUL:.2 legLL:.55 legUR:.05 legLR:.3 torso:-.06 head:-.08",
+            .9f, "armUL:-.55,0,-1.3 armUR:-.55,0,1.3 armLL:-.5 armLR:-.5 legUL:.3 legLL:.7 legUR:.12 legLR:.42 torso:-.1 head:-.14",
+            1.8f, "armUL:-.35,0,-1.15 armUR:-.35,0,1.15 armLL:-.35 armLR:-.35 legUL:.2 legLL:.55 legUR:.05 legLR:.3 torso:-.06 head:-.08");
     static final Rig.Clip H_AIR = new Rig.Clip(HERO, true, 0, "legUL:-.6 legLL:.9 legUR:.2 legLR:.4 armUL:-.6,0,-.5 armUR:-.6,0,.5 torso:.1");
     static final Rig.Clip H_AIM = new Rig.Clip(HERO, true, 0, "armUL:-1.57,-.12 armLL:-.02 armUR:-1.5,.8 armLR:-2 head:.04,-.2 torso:0,.42 legUL:-.3 legUR:.28 root:-.03",
             .7f, "armUL:-1.59,-.11 armLL:-.03 armUR:-1.52,.82 armLR:-2.02 head:.05,-.2 torso:.02,.43 legUL:-.3 legUR:.28 root:-.035",

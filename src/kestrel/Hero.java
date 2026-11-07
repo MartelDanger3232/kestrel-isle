@@ -4,7 +4,7 @@ import java.awt.event.KeyEvent;
 
 /** The hero: movement, lock-on combat, shield, items and every animation state. */
 final class Hero {
-    enum State { MOVE, AIR, ROLL, HOP, FLIP, ATTACK, CHARGE, SPIN, HURT, LEDGE, CLIMB, SWIM, AIM, HOLD, THROW, FLUTE, POSE, DEAD, CAST, DRINK, RIDE, LOOSE, GLIDE }
+    enum State { MOVE, AIR, ROLL, HOP, FLIP, ATTACK, CHARGE, SPIN, HURT, LEDGE, CLIMB, SWIM, AIM, HOLD, THROW, FLUTE, POSE, DEAD, CAST, DRINK, RIDE, LOOSE, GLIDE, HOVER }
 
     static final float RADIUS = .35f, GRAVITY = 26;
     private static final Rig R = Characters.HERO;
@@ -12,6 +12,8 @@ final class Hero {
 
     float x, y, z, vx, vy, vz, yaw, stT, invuln, swordOutT, runAmt, phase, capeA, capeV, holdT, chargeT;
     float stamina = 80, maxStamina = 80, fp = 40, maxFp = 40, castAt;
+    /** The spell being cast, until it's released (-1 for none); every hero casts their own. */
+    int spellCast = -1;
     private float stamDelay, haulT;
     /** Cuts landed so far in a charged whirlwind. */
     private int hits;
@@ -22,6 +24,20 @@ final class Hero {
     int hp = 12, maxHp = 12, combo;
     State st = State.MOVE;
     Foe target;
+    /** A duelling friend locked on to instead of a foe (see Game.rivals). */
+    Hero rival;
+    /** Where the lock-on aims, kept as plain numbers so a co-op friend's copy of this hero aims there too. */
+    float lockX, lockY, lockZ;
+    boolean lockOn;
+    /** Opted in to duels with P: two duellists can fight each other. */
+    boolean dueling;
+    /**
+     * The Skyward Gust cast while locked on: at the top of the throw the hero hangs in the air (HOVER) at hoverY until
+     * an attack spell. aloft is 1 while casting from a hover, 2 once an attack spell has ended it.
+     */
+    boolean hoverNext;
+    float hoverY;
+    int aloft;
     boolean locked, blocking, moving, comboQueued, aimClaw;
     /** Which of the target's lock-on spots (weak points) is selected. */
     int targetPoint;
@@ -111,24 +127,44 @@ final class Hero {
         float ix = mx * cc + mz * cs, iz = -mx * cs + mz * cc;
         boolean controllable = st == State.MOVE || st == State.AIM || st == State.HOLD;
 
-        // Lock-on: hold Shift to face the nearest foe in front (or just strafe if none).
+        // Lock-on: hold Shift to face the nearest foe (or duelling friend) in front. With nobody there, nothing happens.
         if (!in.down(KeyEvent.VK_SHIFT)) lockSpent = false;
-        locked = !lockSpent && in.down(KeyEvent.VK_SHIFT) && controllable | st == State.ATTACK | st == State.HOP | st == State.FLIP | st == State.CAST | st == State.LOOSE;
-        if (!locked) target = null;
-        else if (target == null || !target.alive() || M.dist(x, z, target.x, target.z) > 26) {
-            boolean lost = target != null;
-            // After a kill, jump to whoever is next closest (any direction); otherwise let go entirely.
-            target = lost ? g.nearestFoe(x, z, yaw, 15, true) : g.nearestFoe(x, z, yaw, 18);
-            if (target == null && lost) {
-                lockSpent = true;
-                locked = false;
+        boolean holding = !lockSpent && in.down(KeyEvent.VK_SHIFT)
+                && controllable | st == State.ATTACK | st == State.HOP | st == State.FLIP | st == State.CAST | st == State.LOOSE | st == State.HOVER;
+        if (!holding) {
+            target = null;
+            rival = null;
+        } else {
+            if (rival != null && (rival.st == State.DEAD || M.dist(x, z, rival.x, rival.z) > 26 || !g.rivals(this, rival))) rival = null;
+            boolean lost = target != null && (!target.alive() || M.dist(x, z, target.x, target.z) > 26);
+            if (lost) target = null;
+            if (target == null && rival == null) {
+                // After a kill, jump to whoever is next closest (any direction); otherwise only what's in front.
+                target = lost ? g.nearestFoe(x, z, yaw, 15, true) : g.nearestFoe(x, z, yaw, 18);
+                Hero r = g.nearestRival(this, lost ? 15 : 18, lost);
+                if (r != null && (target == null || M.dist(x, z, r.x, r.z) < M.dist(x, z, target.x, target.z))) {
+                    rival = r;
+                    target = null;
+                }
+                if (target == null && rival == null && lost) lockSpent = true;
+                targetPoint = target == null ? 0 : Math.max(0, target.nextPoint(Foe.POINTS - 1, aimPt));
             }
-            targetPoint = target == null ? 0 : Math.max(0, target.nextPoint(Foe.POINTS - 1, aimPt));
         }
+        locked = target != null || rival != null;
         if (target != null && (in.pressed(KeyEvent.VK_Z) || in.wheel != 0 || !target.point(targetPoint, aimPt))) {
             // Weak points come and go (a bulb bursts, a head slumps): follow to the next one, or cycle by hand.
             int next = target.nextPoint(targetPoint, aimPt);
             if (next >= 0) targetPoint = next;
+        }
+        lockOn = rival != null || target != null && target.point(targetPoint, aimPt);
+        if (rival != null) {
+            lockX = rival.x;
+            lockY = rival.y + 1.2f;
+            lockZ = rival.z;
+        } else if (lockOn) {
+            lockX = aimPt[0];
+            lockY = aimPt[1];
+            lockZ = aimPt[2];
         }
         if (locked) swordOutT = 4;
 
@@ -137,6 +173,7 @@ final class Hero {
             case MOVE -> move(dt, g, ix, iz, mx, mz);
             case AIR -> air(dt, g, ix, iz);
             case GLIDE -> glide(dt, g, ix, iz);
+            case HOVER -> hover(dt, g, ix, iz);
             case ROLL -> {
                 float k = 1 - M.clamp(stT / .45f, 0, 1) * .5f;
                 step(L, hopX * 9 * k * dt, hopZ * 9 * k * dt);
@@ -189,7 +226,7 @@ final class Hero {
             case CLIMB -> climb(dt, g, mz);
             case SWIM -> swim(dt, g, ix, iz);
             case AIM -> {
-                if (target != null) faceTarget(dt, 14);
+                if (locked) faceTarget(dt, 14);
                 else yaw = g.camYaw;
                 if (moving) step(L, ix * 2 * dt, iz * 2 * dt);
                 if (aimClaw ? !in.down(KeyEvent.VK_F) : !in.down(KeyEvent.VK_J) && !in.down(Input.MOUSE_L)) {
@@ -205,7 +242,7 @@ final class Hero {
                 ground(g, false);
             }
             case LOOSE -> {
-                if (target != null) faceTarget(dt, 10);
+                if (locked) faceTarget(dt, 10);
                 if (moving) step(L, ix * 2 * dt, iz * 2 * dt);
                 if (stT > .4f) setState(State.MOVE);
                 ground(g, false);
@@ -235,7 +272,15 @@ final class Hero {
                     g.magic.release(this);
                 }
                 faceTarget(dt, 10);
-                if (anim.done()) setState(State.MOVE);
+                if (st == State.CAST && anim.done()) {
+                    // A cast from a hover goes back to hovering, unless it was an attack: then the wind lets go.
+                    if (aloft == 1) setState(State.HOVER);
+                    else if (aloft == 2 || y - g.level.floor(x, z) > .5f) {
+                        vy = 0;
+                        setState(State.AIR);
+                    } else setState(State.MOVE);
+                    aloft = 0;
+                }
             }
             case DRINK -> {
                 if (moving) step(L, ix * 1.5f * dt, iz * 1.5f * dt);
@@ -421,6 +466,7 @@ final class Hero {
         setState(State.ATTACK);
         anim.restart(SLASH[k], .04f);
         if (target != null) yaw = M.atan2(target.x - x, target.z - z);
+        else if (rival != null) yaw = M.atan2(rival.x - x, rival.z - z);
         g.sfx(Audio.SWING);
     }
 
@@ -448,6 +494,15 @@ final class Hero {
         ground(g, false);
     }
 
+    /** Thrown skywards (the Skyward Gust), drifting forward; coming back down to where it started never hurts. */
+    void launch(float up, float ahead) {
+        vy = up;
+        vx += M.sin(yaw) * ahead;
+        vz += M.cos(yaw) * ahead;
+        fallFrom = y;
+        setState(State.AIR);
+    }
+
     private void air(float dt, Game g, float ix, float iz) {
         if (g.gear.windcloak && g.in.pressed(KeyEvent.VK_SPACE) && y - g.level.floor(x, z) > 1.1f && stamina > 4) {
             setState(State.GLIDE);
@@ -457,6 +512,14 @@ final class Hero {
         if (g.gear.windcloak && vy < -6 && y - g.level.floor(x, z) > 4)
             g.tip("glide", "Falling! Press Space to open the Windcloak and glide. Steer with the movement keys; Space again folds it. Warm air over fires and vents lifts you.");
         vy = Math.max(vy - GRAVITY * dt, -40);
+        if (hoverNext && vy <= 0) {
+            // The top of a locked-on Skyward Gust: the wind holds the hero here.
+            hoverNext = false;
+            hoverY = y;
+            vx = vz = 0;
+            setState(State.HOVER);
+            return;
+        }
         if (moving) {
             vx = M.approach(vx, ix * 5, 2, dt);
             vz = M.approach(vz, iz * 5, 2, dt);
@@ -600,20 +663,60 @@ final class Hero {
     }
 
     private void faceTarget(float dt, float rate) {
-        if (target == null) return;
-        float tx = target.x, tz = target.z;
-        if (target.point(targetPoint, aimPt)) {
-            tx = aimPt[0];
-            tz = aimPt[2];
-        }
+        float tx, tz;
+        if (rival != null) {
+            tx = rival.x;
+            tz = rival.z;
+        } else if (target != null) {
+            tx = target.x;
+            tz = target.z;
+            if (target.point(targetPoint, aimPt)) {
+                tx = aimPt[0];
+                tz = aimPt[2];
+            }
+        } else return;
         yaw = M.turn(yaw, M.atan2(tx - x, tz - z), rate * dt);
+    }
+
+    /** Knocked off balance by a duelling friend's parry. */
+    void reel(float fromX, float fromZ) {
+        float dx = x - fromX, dz = z - fromZ, d = Math.max(.01f, M.hypot(dx, dz));
+        hopX = dx / d * 6;
+        hopZ = dz / d * 6;
+        setState(State.HURT);
+        anim.restart(Characters.H_HURT, .04f);
+    }
+
+    /** Held up by the Skyward Gust's wind, facing the lock-on, until an attack spell (Space opens the glider; the wind fades after 15 s). */
+    private void hover(float dt, Game g, float ix, float iz) {
+        vx = M.approach(vx, ix * 2, 4, dt);
+        vz = M.approach(vz, iz * 2, 4, dt);
+        step(g.level, vx * dt, vz * dt);
+        y = hoverY + M.sin(stT * 2.4f) * .18f;
+        faceTarget(dt, 8);
+        if (g.in.pressed(KeyEvent.VK_C) && g.magic.begin(this)) return;
+        if (g.in.pressed(KeyEvent.VK_SPACE) && g.gear.windcloak && stamina > 4) {
+            setState(State.GLIDE);
+            g.sfx(Audio.GUST);
+        } else if (stT > 15) {
+            vy = 0;
+            setState(State.AIR);
+        }
     }
 
     /** How far the bowstring is drawn, 0 to 1. */
     float draw() { return st == State.AIM && !aimClaw ? Math.min(1, stT / .35f) : 0; }
 
-    /** The locked-on spot, if any. */
-    boolean aimPoint(float[] out) { return target != null && target.alive() && target.point(targetPoint, out); }
+    /** The locked-on spot, if any (on a co-op friend's copy, from the numbers the host sent). */
+    boolean aimPoint(float[] out) {
+        if (rival != null || target == null && locked && lockOn) {
+            out[0] = lockX;
+            out[1] = lockY;
+            out[2] = lockZ;
+            return true;
+        }
+        return target != null && target.alive() && target.point(targetPoint, out);
+    }
 
     /** Called by the game when something hits the hero; returns false if the shield took it. */
     boolean hit(Game g, int dmg, float fromX, float fromZ, boolean blockable) {
@@ -666,6 +769,7 @@ final class Hero {
             case MOVE -> anim.play(blocking ? Characters.H_BLOCK : null, .12f);
             case AIR -> anim.play(Characters.H_AIR, .15f);
             case GLIDE -> anim.play(Characters.H_GLIDE, .2f);
+            case HOVER -> anim.play(Characters.H_HOVER, .3f);
             case CLIMB -> anim.play(Characters.H_CLIMB, .15f);
             case SWIM -> anim.play(Characters.H_SWIM, .2f);
             case AIM -> {

@@ -47,8 +47,10 @@ final class Hud {
         if (g.fade > 0) fill(new Color(0, 0, 0, (int) (255 * Math.min(1, g.fade))), 0, 0, w, h);
         switch (g.screen) {
             case TITLE -> title();
+            case JOIN -> join();
             case END -> ending();
             default -> {
+                if (g.coop != null) coop();
                 playHud();
                 switch (g.screen) {
                     case DIALOG -> dialog();
@@ -60,6 +62,7 @@ final class Hud {
                     case LEVEL -> level();
                     case TRAVEL -> travel();
                     case GEAR -> gear();
+                    case DEV -> devPack();
                     case OVER -> {
                         fill(new Color(20, 0, 0, (int) (200 * Math.min(1, g.overT))), 0, 0, w, h);
                         centered(huge, "You have fallen", h * .42f, INK);
@@ -204,7 +207,8 @@ final class Hud {
         }
         Foe t = hero.target;
         float[] spot = new float[3];
-        if (hero.locked && t != null && (hero.aimPoint(spot) ? r.project(spot[0], spot[1] + .55f, spot[2], tmp) : r.project(t.x, t.centerY() + t.radius() + .6f, t.z, tmp))) {
+        // The marker over the lock-on: a foe's weak point, a duelling friend, or (on a co-op friend's screen) where the host says.
+        if (hero.locked && (hero.aimPoint(spot) ? r.project(spot[0], spot[1] + .55f, spot[2], tmp) : t != null && r.project(t.x, t.centerY() + t.radius() + .6f, t.z, tmp))) {
             float x = tmp[0] * w / r.w, y = tmp[1] * h / r.h, bob = M.sin(g.time * 6) * 4 * s;
             Polygon arrow = new Polygon();
             arrow.addPoint((int) x, (int) (y + bob));
@@ -374,10 +378,47 @@ final class Hud {
         fill(new Color(0, 0, 0, 80), 0, 0, w, h);
         centered(huge, "KESTREL  ISLE", h * .32f, INK);
         centered(big, "The Windflute", h * .32f + 46 * s, GOLD);
-        String[] opts = g.story.hasSave() ? new String[]{"New Game", "Continue"} : new String[]{"New Game"};
+        String[] opts = g.story.titleOptions();
         for (int i = 0; i < opts.length; i++)
-            centered(mid, (i == g.story.titleSel ? "▶  " : "") + opts[i], h * .62f + i * 34 * s, i == g.story.titleSel ? GOLD : INK);
-        centered(small, "W/S choose  ·  Enter start", h * .62f + 90 * s, DIM);
+            centered(mid, (i == g.story.titleSel ? "▶  " : "") + opts[i], h * .6f + i * 34 * s, i == g.story.titleSel ? GOLD : INK);
+        centered(small, "W/S choose  ·  Enter start", h * .6f + (opts.length * 34 + 22) * s, DIM);
+        if (g.message != null && g.messageT > 0) centered(small, g.message, h * .93f, GOLD);
+    }
+
+    /** Typing a friend's address to join their island. */
+    private void join() {
+        fill(new Color(0, 0, 0, 150), 0, 0, w, h);
+        centered(big, "Join a friend's island", h * .3f, INK);
+        centered(small, "Type the address your friend's game shows after they choose Host co-op (like 192.168.1.20).", h * .3f + 40 * s, DIM);
+        float bw = 420 * s, bx = (w - bw) / 2, by = h * .45f;
+        panel(bx, by, bw, 50 * s);
+        String caret = ((int) (g.time * 2) & 1) == 0 ? "|" : " ";
+        centered(mid, g.joinAddress + caret, by + 32 * s, GOLD);
+        centered(small, "Enter join  ·  Backspace erase  ·  Esc back", by + 90 * s, DIM);
+        centered(small, "You bring your own hero and gear; what you find comes home to your save.", by + 116 * s, DIM);
+        if (g.message != null && g.messageT > 0) centered(small, g.message, h * .8f, GOLD);
+    }
+
+    /** Co-op: who's here and how friends join, and a name over each other player's head. */
+    private void coop() {
+        Coop c = g.coop;
+        StringBuilder who = new StringBuilder();
+        for (Game.Player p : g.players) who.append(who.isEmpty() ? "" : ", ").append(p == g.me ? "you" : p.name);
+        String line = c.hosting() ? "Co-op open at " + (c.addresses.isEmpty() ? "this computer" : String.join(" or ", c.addresses)) + "   ·   " + who
+                : "Co-op on " + c.hostName + "'s island   ·   " + who;
+        centered(small, line, h - 14 * s, new Color(150, 200, 255));
+        if (c.joined() && c.hostScreen != Game.Screen.PLAY && c.hostScreen != Game.Screen.FLUTE && !Game.MENUS.contains(c.hostScreen))
+            centered(mid, "The island waits while " + c.hostName + " talks with someone.", h * .2f, GOLD);
+        float[] at = new float[3];
+        for (Game.Player p : g.players) {
+            if (p == g.me || !r.project(p.hero.x, p.hero.y + 2.15f, p.hero.z, at)) continue;
+            float x = at[0] * w / r.w, y = at[1] * h / r.h;
+            String tag = p.hero.dueling ? "⚔ " + p.name : p.name;
+            int tw = g2.getFontMetrics(small).stringWidth(tag);
+            fill(p.hero.dueling ? new Color(120, 20, 20, 170) : new Color(0, 0, 0, 120), x - tw / 2f - 6 * s, y - 15 * s, tw + 12 * s, 20 * s);
+            text(small, tag, x - tw / 2f, y, p.hero.st == Hero.State.DEAD ? DIM : INK);
+        }
+        if (g.hero.dueling) centered(mid, "⚔ Ready to duel (P to stop)", h - 40 * s, new Color(255, 120, 110));
     }
 
     private void ending() {
@@ -494,6 +535,36 @@ final class Hud {
         text(small, "W/S choose   ·   A/D switch column   ·   E equip   ·   I close", x + pw - 470 * s, y + ph - 18 * s, DIM);
     }
 
+    /** The dev pack: every item in the game by tab; a gold diamond marks what the hero already has. */
+    private void devPack() {
+        fill(new Color(0, 0, 0, 160), 0, 0, w, h);
+        float pw = 960 * s, ph = 540 * s, x = (w - pw) / 2, y = (h - ph) / 2;
+        panel(x, y, pw, ph);
+        text(big, "Dev pack", x + 24 * s, y + 44 * s, INK);
+        java.util.List<java.util.List<Game.DevItem>> tabs = g.devItems();
+        float tx = x + 24 * s;
+        for (int t = 0; t < tabs.size(); t++) {
+            text(small, Game.DEV_TABS[t], tx, y + 86 * s, t == g.devTab ? GOLD : DIM);
+            tx += g2.getFontMetrics(small).stringWidth(Game.DEV_TABS[t]) + 22 * s;
+        }
+        java.util.List<Game.DevItem> tab = tabs.get(g.devTab);
+        for (int i = 0; i < tab.size(); i++) {
+            Game.DevItem it = tab.get(i);
+            float ry = y + 104 * s + i * 32 * s;
+            if (i == g.devRow) {
+                g2.setColor(new Color(242, 193, 78, 55));
+                g2.fillRoundRect((int) (x + 16 * s), (int) ry, (int) (430 * s), (int) (28 * s), 10, 10);
+            }
+            boolean has = it.has().getAsBoolean();
+            if (has) diamond(x + 30 * s, ry + 14 * s, 6 * s, 1, GOLD);
+            text(small, it.name(), x + 44 * s, ry + 20 * s, has ? GOLD : INK);
+        }
+        Game.DevItem sel = tab.get(g.devRow);
+        text(mid, sel.name(), x + 480 * s, y + 130 * s, INK);
+        text(small, sel.has().getAsBoolean() ? "Already in your inventory." : "Press E to put it in your inventory.", x + 480 * s, y + 158 * s, DIM);
+        text(small, "A/D tab   ·   W/S choose   ·   E take   ·   F take the whole tab   ·   [ close", x + pw - 600 * s, y + ph - 18 * s, DIM);
+    }
+
     private void map() {
         fill(new Color(8, 10, 14, 235), 0, 0, w, h);
         float size = h * .86f, x = (w - size) / 2, y = (h - size) / 2;
@@ -528,7 +599,7 @@ final class Hud {
         centered(huge, "Paused", h * .26f, INK);
         String[] lines = {"WASD move  ·  mouse or arrow keys turn the camera  ·  Space roll (uses stamina)", "Shift hold to lock on (Space then side-hops or back-flips)",
                 "Click / J sword (combo; hold to charge a spin)  ·  K / right-click shield", "C cast spell  ·  V switch spell  ·  R drink an Ember Draught",
-                "Q swap sword/bow  ·  F use tool  ·  X switch tool  ·  Z or mouse wheel: next lock-on spot  ·  T flute", "E talk, open, ride, rest  ·  G send Juniper away  ·  H hint  ·  Tab satchel  ·  M map", "Dev:   `  skip objective   ·   =  jump to it   ·   ]  +1000 gleams",
+                "Q swap sword/bow  ·  F use tool  ·  X switch tool  ·  Z or mouse wheel: next lock-on spot  ·  T flute", "E talk, open, ride, rest  ·  G send Juniper away  ·  H hint  ·  Tab satchel  ·  M map  ·  P duel (co-op)", "Dev:   `  skip objective   ·   =  jump to it   ·   ]  +1000 gleams   ·   [  dev pack (any item)",
                 "Enter / Esc resume   ·   Q quit"};
         for (int i = 0; i < lines.length; i++) centered(small, lines[i], h * .4f + i * 26 * s, i == 7 ? GOLD : INK);
     }

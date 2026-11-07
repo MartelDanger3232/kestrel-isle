@@ -7,13 +7,13 @@ import java.util.stream.IntStream;
 final class WorldView {
     private static final float CHUNK_M = World.CHUNK * World.CELL;
     private static final int[] FLOWERS = {0xf2d75a, 0xf4f1ea, 0xb98be0};
-    private static final int CLOUD = 512;
+    static final int CLOUD = 512;
     private final Renderer r;
     private final World w;
     private final long[] order = new long[World.CHUNKS * World.CHUNKS];
     private int visible;
     private final float[] tvx = new float[33 * 33], tvy = new float[33 * 33], tvz = new float[33 * 33];
-    private final float[] cloud = new float[CLOUD * CLOUD];
+    final float[] cloud = new float[CLOUD * CLOUD];
     private final Xf xf = new Xf();
     // Per-frame sky constants.
     private float zr, zg, zbl, hr, hg, hb, sunX, sunY, sunZ, sunVis, night, cover, drift, cr, cg, cb;
@@ -53,6 +53,8 @@ final class WorldView {
             }
         Arrays.sort(order, 0, count);
         visible = count;
+        // The graphics card keeps the ground (and the trees and rocks on it) itself; it only needs the chunk order.
+        if (r.gpu != null) return;
         for (int i = 0; i < count; i++) {
             int id = (int) (order[i] & 0xfffff);
             drawChunk(id % World.CHUNKS, id / World.CHUNKS);
@@ -148,7 +150,8 @@ final class WorldView {
     }
 
     void grass(float time) {
-        int gi = (int) (r.cx / World.CELL), gj = (int) (r.cz / World.CELL), R = 13;
+        boolean gpu = r.gpu != null;
+        int gi = (int) (r.cx / World.CELL), gj = (int) (r.cz / World.CELL), R = gpu ? 22 : 13;
         if (r.cy - w.height(r.cx, r.cz) > 45) return;
         float lit = Math.max(0, r.ly) * .85f, kr = r.ar + r.sr * lit, kg = r.ag + r.sg * lit, kb = r.ab + r.sb * lit;
         for (int j = gj - R; j <= gj + R; j++)
@@ -163,7 +166,7 @@ final class WorldView {
                 if (d2 > R * R * 4) continue;
                 float vz = dx * r.fx + (y0 - r.cy) * r.fy + dz * r.fz;
                 if (vz < -2 || Math.abs(dx * r.rx + dz * r.rz) > vz * 1.9f + 3) continue;
-                for (int t = 0, blades = d2 < 200 ? 4 : 2; t < blades; t++) {
+                for (int t = 0, blades = gpu ? (d2 < 300 ? 9 : 4) : d2 < 200 ? 4 : 2; t < blades; t++) {
                     float hx = M.hash(i * 7 + t, j), hz = M.hash(i, j * 5 + t), hv = M.hash(i + t * 31, j + 17);
                     float x = bx + hx * 2, z = bz + hz * 2, y = w.height(x, z);
                     float tall = (b == World.FOREST ? .4f : .3f) + hv * .35f;
@@ -171,6 +174,11 @@ final class WorldView {
                     float ang = hv * 6.28f, cw = M.cos(ang) * .13f, sw = M.sin(ang) * .13f;
                     int base = hv < .05f ? FLOWERS[(int) (hx * 2.99f)] : b == World.FOREST ? 0x3a7032 : 0x5f9a42;
                     float v = .75f + hz * .35f;
+                    if (gpu) {
+                        // At full resolution blades need to be slimmer (and more of them) to read as grass.
+                        r.gpu.blade(x - cw * .4f, y, z - sw * .4f, x + cw * .4f, y, z + sw * .4f, x + sway, y + tall, z + sway * .6f, M.scale(base, v));
+                        continue;
+                    }
                     int col = M.rgb((int) ((base >> 16 & 255) * kr * v), (int) ((base >> 8 & 255) * kg * v), (int) ((base & 255) * kb * v));
                     r.worldTri(x - cw, y, z - sw, x + cw, y, z + sw, x + sway, y + tall, z + sway * .6f, col, true, 256);
                 }

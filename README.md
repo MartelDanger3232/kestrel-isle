@@ -1,6 +1,6 @@
 # Kestrel Isle: The Windflute
 
-An original 3D action-adventure in pure Java (no libraries). It uses its own software renderer, a synthesized soundtrack and hand-built dungeons.
+An original 3D action-adventure in Java. It draws on the graphics card with [jMonkeyEngine](https://jmonkeyengine.org): real-time sun shadows, an ocean with reflections and foam, glow and god rays, and torches and campfires that light their surroundings. It has a synthesized soundtrack and hand-built dungeons. The original software renderer is still there as a fallback (`--classic`).
 
 ![Kestrel Isle screenshots](shots/sheet.png)
 
@@ -13,7 +13,7 @@ Along the way:
   - bend sunbeams with its mirrors to open its doors;
   - fight burrowing Dune Stalkers and **Ashmaw**, a giant sand wyrm;
   - claim **Wren's Windcloak**, a glider.
-- **The Windcloak:** press Space in mid-air to glide. Warm air over campfires and desert vents carries you up, and old offerings wait on top of the desert mesas.
+- **The Windcloak:** press Space in mid-air to glide. Warm air over campfires and desert vents carries you up, and old offerings wait on top of the desert mesas. Its wind also teaches **Skyward Gust**, a spell that throws you 13 m into the sky from anywhere outdoors, so you can take off from flat ground. Cast it while locked on to a foe (or a duelling friend) and the wind holds you up there, facing them, until you strike with an attack spell.
 - **The Stormdrake:** once you fly, a colossal drake rides the storms over the mountain. Darken its three glowing storm-scales to bring it down.
 - **Parry:** raise your shield just as a blow lands. The attacker reels, and your next sword strike is a riposte for triple damage.
 - **Arsenal and attire:** press I for the gear screen.
@@ -50,15 +50,27 @@ Get the latest build from the [Releases page](https://github.com/MartelDanger323
 
 ## Run from source
 
-You need JDK 22 or newer.
+You need JDK 22 or newer. The first run downloads the engine (jMonkeyEngine and LWJGL, about 12 MB) from Maven Central into `lib/`, and the KayKit model packs (about 41 MB) from GitHub into `packs/`, checking every file against `lib.sha256` and `packs.sha256`.
 
     ./run.sh
+
+The characters' bodies are sculpted in Blender by `art/blender/humanoid.py`. After changing it, rebuild them with `blender -b --factory-startup -P art/blender/humanoid.py -- res/Models/humanoid.kscl`.
 
 `./package.sh` builds a self-contained app for your own computer into `build/app`. Publishing a GitHub release builds the Windows, Mac and Linux downloads automatically (`.github/workflows/release.yml`).
 
 It always runs full screen. Esc pauses, then Q quits.
 
 Progress autosaves to `save.properties` in a `.kestrel-isle` folder in your home folder (`~/.kestrel-isle` on Mac and Linux, `C:\Users\<you>\.kestrel-isle` on Windows). Choose **Continue** on the title screen to resume.
+
+## Co-op (up to 4 players)
+
+Play the island together, each on your own computer, all with the same version of the game.
+
+- **Host:** choose **Host co-op** on the title screen. Your save carries on as the shared world, and the bottom of the screen shows the address friends should type. On a Mac, allow incoming connections if asked.
+- **Join:** choose **Join co-op**, type the host's address, and press Enter. You bring your own hero and gear from your own save, and the gleams and items you pick up go home with you when you leave.
+- **Together:** foes go after whoever is nearest, and everyone can fight, cast and pick things up. The host leads the story: they talk to people, open dungeons and fast-travel, and friends follow them in. Friends keep playing while the host is in a menu, but the island waits while the host talks with someone. A fallen friend gets back up beside the host a few seconds later. The grappling claw and riding Juniper are the host's. Friends can open the dev pack (`[`) too.
+- **Duels:** press **P** to say you're ready to duel (your name tag turns red). Two duellists can lock on to each other with Shift and fight with swords, arrows and spells; blocks and parries work as against foes, and a parried attacker reels. A duel ends when someone is down to their last heart: friends never kill each other.
+- **Connecting:** friends on the same Wi-Fi just type the host's address (like `192.168.1.20`). Across the internet, the easiest way is the free [Tailscale](https://tailscale.com) app on every computer: the host then shares their Tailscale address (`100.x.y.z`). Otherwise, the host forwards TCP port 47777 on their router to their computer and shares their public address.
 
 ## Controls
 
@@ -67,7 +79,8 @@ Progress autosaves to `save.properties` in a `.kestrel-isle` folder in your home
 | WASD | move |
 | Mouse or arrow keys | camera |
 | Space | roll; while locked on, side-hop (A/D) or back-flip (S); in mid-air, open or fold the Windcloak; in rising warm air, take off |
-| Shift (hold) | lock on to the nearest foe |
+| Shift (hold) | lock on to the nearest foe in front (or duelling friend); with nobody there it does nothing |
+| P | co-op: ready to duel (both players press it to fight each other) |
 | Click / J | sword (3-hit combo; hold, then release for a spin attack) |
 | K / right-click | shield (raise it just as a blow lands to parry) |
 | F | use item (bow and claw: hold to aim, release to fire; bombs: F to light, F to throw) |
@@ -84,8 +97,14 @@ Rolling, swinging and blocking use stamina (the green bar). Rest at Lantern Shri
 
 ## Dev flags
 
-**Dev keys:** `` ` `` (above Tab) completes the current objective (inside a dungeon it finishes the whole dungeon and hands over its rewards), `=` teleports you to the current objective, and `]` gives 1000 gleams.
+**Dev keys:** `` ` `` (above Tab) completes the current objective (inside a dungeon it finishes the whole dungeon and hands over its rewards), `=` teleports you to the current objective, and `]` gives 1000 gleams. `[` opens the **dev pack**: every weapon, outfit, dye, tool, song, spell, stone and supply in the game, ready to put straight into your inventory (E takes one, F takes a whole tab).
 
 Blast Pods (glowing orange plants) give 3 bombs each and regrow, so you can't get stuck without bombs.
 
-`--test` runs scripted checks of movement, combat, songs, puzzles, bosses and saving. `--bench` times rendering. `--shots DIR` writes headless screenshots.
+`--test` runs scripted checks of movement, combat, songs, puzzles, bosses and saving. `--bench` times rendering. `--shots DIR` writes headless screenshots from the software renderer, `--gpu-shots DIR` the same scenes from the graphics card. `--dev-window` runs in a window, and `--autoquit SECONDS` reports the frame rate. If the frame rate sags for a few seconds, the costliest effects (ambient occlusion first) switch off by themselves. For testing co-op on one computer: `--host` or `--join ADDRESS` skip the title screen, `--name NAME` sets your player name, `--bot` makes your hero walk in circles and swing, `--snap FILE` keeps a picture of the last frame, and `-Dkestrel.save=FILE` plays from another save.
+
+## Credits
+
+Town buildings: the [KayKit](https://kaylousberg.com) Medieval Hexagon pack by Kay Lousberg (CC0).
+
+Graphics: [jMonkeyEngine](https://jmonkeyengine.org) and [LWJGL](https://www.lwjgl.org), both under the BSD 3-Clause license, with GLFW (zlib license) and jemalloc (BSD 2-Clause); glTF models load through Gson (Apache 2.0). Their license texts are in [THIRD-PARTY.md](THIRD-PARTY.md) and [licenses/](licenses), which also ship inside the game.
