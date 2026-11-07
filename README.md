@@ -66,11 +66,11 @@ Progress autosaves to `save.properties` in a `.kestrel-isle` folder in your home
 
 Play the island together, each on your own computer, all with the same version of the game.
 
-- **Host:** choose **Host co-op** on the title screen. Your save carries on as the shared world, and the bottom of the screen shows the address friends should type. On a Mac, allow incoming connections if asked.
-- **Join:** choose **Join co-op**, type the host's address, and press Enter. You bring your own hero and gear from your own save, and the gleams and items you pick up go home with you when you leave.
+- **Host:** choose **Host co-op** on the title screen. Your save carries on as the shared world, and a **join code** (like 24179) appears at the bottom of the screen. It works over the internet, with nothing to set up: the game opens its own tunnel through the free bore.pub relay, and asks for the same code each time you host.
+- **Join:** choose **Join co-op**, type (or paste) the host's join code, and press Enter. A local address like 192.168.1.20 works too. You bring your own hero and gear from your own save, and the gleams and items you pick up go home with you when you leave.
 - **Together:** foes go after whoever is nearest, and everyone can fight, cast and pick things up. The host leads the story: they talk to people, open dungeons and fast-travel, and friends follow them in. Friends keep playing while the host is in a menu, but the island waits while the host talks with someone. A fallen friend gets back up beside the host a few seconds later. The grappling claw and riding Juniper are the host's. Friends can open the dev pack (`[`) too.
 - **Duels:** press **P** to say you're ready to duel (your name tag turns red). Two duellists can lock on to each other with Shift and fight with swords, arrows and spells; blocks and parries work as against foes, and a parried attacker reels. A duel ends when someone is down to their last heart: friends never kill each other.
-- **Connecting:** friends on the same Wi-Fi just type the host's address (like `192.168.1.20`). Across the internet, the easiest way is the free [Tailscale](https://tailscale.com) app on every computer: the host then shares their Tailscale address (`100.x.y.z`). Otherwise, the host forwards TCP port 47777 on their router to their computer and shares their public address.
+- **Connecting:** the join code is all a friend needs, anywhere. It's the relay's port, so `bore.pub:24179` typed in full works too. Friends on the same Wi-Fi can instead type the host's local address (like `192.168.1.20`); Tailscale addresses and port forwarding (TCP 47777) also work.
 
 ## Towns, the law and the sea
 

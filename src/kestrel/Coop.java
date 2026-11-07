@@ -32,7 +32,7 @@ import java.util.zip.InflaterInputStream;
 final class Coop {
     static final int PORT = 47777, MAX = 4;
     private static final int HELLO = 1, WELCOME = 2, KEYS = 3, WORLD = 4, FULL = 5, DEV = 6, VERSION = 2;
-    private static final Path PREFS = Story.SAVE.resolveSibling("coop.txt");
+    private static final Path PREFS = Story.SAVE.resolveSibling("coop.txt"), CODE = Story.SAVE.resolveSibling("coop-code.txt");
     /** Set from the command line: start hosting, or join this address, as soon as the island is ready. */
     static boolean autoHost;
     static String autoJoin;
@@ -41,6 +41,9 @@ final class Coop {
     private final boolean hosting;
     // Hosting.
     private ServerSocket server;
+    /** The island's way in from the internet, and the join code it was given (saved, to ask for the same one next time). */
+    Tunnel tunnel;
+    private int savedCode = -1;
     private final List<Link> links = new CopyOnWriteArrayList<>();
     /** This computer's addresses, for friends to type in. */
     final List<String> addresses = new ArrayList<>();
@@ -77,9 +80,10 @@ final class Coop {
             Thread t = new Thread(c::accept, "co-op host");
             t.setDaemon(true);
             t.start();
+            c.tunnel = Tunnel.open(PORT, lastCode());
             g.coop = c;
             g.audio.echo = c.sounds::add;
-            g.say("Co-op is open: friends choose Join co-op and type " + (c.addresses.isEmpty() ? "this computer's address" : c.addresses.get(0)) + ".");
+            g.say("Co-op is open! Your join code appears at the bottom of the screen: friends choose Join co-op and type it.");
             return true;
         } catch (IOException e) {
             g.say("Couldn't open co-op: " + e.getMessage());
@@ -89,6 +93,8 @@ final class Coop {
 
     /** Joins a friend's island, bringing this save's hero and gear. The address may carry a port (a tunnel's, say): host:port. */
     static void join(Game g, String address) {
+        // A join code is just the relay's port.
+        if (address.matches("\\d{3,5}")) address = Tunnel.RELAY + ":" + address;
         try {
             int colon = address.lastIndexOf(':'), port = PORT;
             String host = address;
@@ -114,7 +120,16 @@ final class Coop {
             Files.createDirectories(PREFS.getParent());
             Files.writeString(PREFS, address);
         } catch (IOException | NumberFormatException e) {
-            g.say("Couldn't reach " + address + " (" + e.getMessage() + "). Is co-op open on their island, and are you on the same network?");
+            g.say("Couldn't reach " + address + " (" + e.getMessage() + "). Check the code, and that co-op is open on their island.");
+        }
+    }
+
+    /** The join code this computer was given last time it hosted, or 0. */
+    private static int lastCode() {
+        try {
+            return Files.exists(CODE) ? Integer.parseInt(Files.readString(CODE).trim()) : 0;
+        } catch (IOException | NumberFormatException e) {
+            return 0;
         }
     }
 
@@ -141,6 +156,7 @@ final class Coop {
     /** Leaving (quitting, or the host going away): a friend takes their gear home to their own save. */
     void leave() {
         if (hosting) {
+            if (tunnel != null) tunnel.close();
             try {
                 server.close();
             } catch (IOException ignored) {
@@ -157,6 +173,15 @@ final class Coop {
 
     /** Before the game's update: a host lets friends in and out and passes on their keys; a friend takes the latest world. */
     void before() {
+        if (hosting && tunnel != null && tunnel.code != savedCode && tunnel.code != 0) {
+            savedCode = tunnel.code;
+            try {
+                Files.createDirectories(CODE.getParent());
+                Files.writeString(CODE, Integer.toString(savedCode));
+            } catch (IOException ignored) {
+                // Next time just gets a new code.
+            }
+        }
         if (hosting) {
             for (Link l : links) {
                 if (!l.open) {

@@ -426,12 +426,12 @@ final class Hud {
     private void join() {
         fill(new Color(0, 0, 0, 150), 0, 0, w, h);
         centered(big, "Join a friend's island", h * .3f, INK);
-        centered(small, "Type the address your friend's game shows after they choose Host co-op (like 192.168.1.20).", h * .3f + 40 * s, DIM);
+        centered(small, "Type (or paste with Ctrl+V / Cmd+V) the JOIN CODE shown at the bottom of your friend's screen.", h * .3f + 40 * s, DIM);
         float bw = 420 * s, bx = (w - bw) / 2, by = h * .45f;
         panel(bx, by, bw, 50 * s);
         String caret = ((int) (g.time * 2) & 1) == 0 ? "|" : " ";
         centered(mid, g.joinAddress + caret, by + 32 * s, GOLD);
-        centered(small, "Enter join  ·  Backspace erase  ·  Esc back", by + 90 * s, DIM);
+        centered(small, "Enter join  ·  Backspace erase  ·  Esc back   (an address like 192.168.1.20 works too)", by + 90 * s, DIM);
         centered(small, "You bring your own hero and gear; what you find comes home to your save.", by + 116 * s, DIM);
         if (g.message != null && g.messageT > 0) centered(small, g.message, h * .8f, GOLD);
     }
@@ -441,9 +441,15 @@ final class Hud {
         Coop c = g.coop;
         StringBuilder who = new StringBuilder();
         for (Game.Player p : g.players) who.append(who.isEmpty() ? "" : ", ").append(p == g.me ? "you" : p.name);
-        String line = c.hosting() ? "Co-op open at " + (c.addresses.isEmpty() ? "this computer" : String.join(" or ", c.addresses)) + "   ·   " + who
+        String line = c.hosting() ? "Same Wi-Fi? They can also type " + (c.addresses.isEmpty() ? "this computer's address" : c.addresses.get(0)) + "   ·   " + who
                 : "Co-op on " + c.hostName + "'s island   ·   " + who;
         centered(small, line, h - 14 * s, new Color(150, 200, 255));
+        if (c.hosting() && c.tunnel != null) {
+            // The join code, big enough to read out to a friend.
+            Tunnel t = c.tunnel;
+            String code = t.code != 0 ? "JOIN CODE  " + t.code : t.problem != null ? t.problem : "Getting a join code...";
+            centered(t.code != 0 ? mid : small, code, h - 40 * s, t.code != 0 ? GOLD : DIM);
+        }
         if (c.joined() && c.hostScreen != Game.Screen.PLAY && c.hostScreen != Game.Screen.FLUTE && !Game.MENUS.contains(c.hostScreen))
             centered(mid, "The island waits while " + c.hostName + " talks with someone.", h * .2f, GOLD);
         float[] at = new float[3];

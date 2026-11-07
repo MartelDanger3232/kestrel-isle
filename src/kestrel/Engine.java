@@ -102,6 +102,7 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
                 {KeyInput.KEY_RETURN, KeyEvent.VK_ENTER}, {KeyInput.KEY_NUMPADENTER, KeyEvent.VK_ENTER}, {KeyInput.KEY_TAB, KeyEvent.VK_TAB},
                 {KeyInput.KEY_LSHIFT, KeyEvent.VK_SHIFT}, {KeyInput.KEY_RSHIFT, KeyEvent.VK_SHIFT},
                 {KeyInput.KEY_LCONTROL, KeyEvent.VK_CONTROL}, {KeyInput.KEY_RCONTROL, KeyEvent.VK_CONTROL},
+                {KeyInput.KEY_LMETA, KeyEvent.VK_META}, {KeyInput.KEY_RMETA, KeyEvent.VK_META},
                 {KeyInput.KEY_LMENU, KeyEvent.VK_ALT}, {KeyInput.KEY_RMENU, KeyEvent.VK_ALT},
                 {KeyInput.KEY_UP, KeyEvent.VK_UP}, {KeyInput.KEY_DOWN, KeyEvent.VK_DOWN},
                 {KeyInput.KEY_LEFT, KeyEvent.VK_LEFT}, {KeyInput.KEY_RIGHT, KeyEvent.VK_RIGHT},
@@ -187,6 +188,7 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
         LOGS[0].setLevel(Level.WARNING);
         LOGS[1].setLevel(Level.SEVERE);
         Sculpts.enabled = true;
+        Game.clipboard = () -> org.lwjgl.glfw.GLFW.glfwGetClipboardString(0L);
         Engine app = new Engine(windowed || shots != null, autoquit, shots);
         AppSettings s = new AppSettings(true);
         s.setTitle("Kestrel Isle");

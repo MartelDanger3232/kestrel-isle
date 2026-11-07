@@ -93,6 +93,8 @@ final class Game {
     final World world;
     final Field field;
     final Jobs jobs = new Jobs(this);
+    /** The system clipboard's text (the engine supplies it), for pasting a join code. */
+    static java.util.function.Supplier<String> clipboard = () -> null;
     final Climate climate = new Climate();
     final Story story;
     final Magic magic;
@@ -320,8 +322,16 @@ final class Game {
             screen = Screen.TITLE;
             return;
         }
+        boolean command = in.down(KeyEvent.VK_CONTROL) || in.down(KeyEvent.VK_META);
+        if (command && in.pressed(KeyEvent.VK_V)) {
+            // Paste: keep only what an address or code can hold.
+            String clip = clipboard.get();
+            if (clip != null) joinAddress.append(clip.trim().replaceAll("[^A-Za-z0-9.:\\-]", "").toLowerCase());
+            if (joinAddress.length() > 60) joinAddress.setLength(60);
+            return;
+        }
         for (int k = KeyEvent.VK_0; k <= KeyEvent.VK_Z; k++)
-            if (in.pressed(k) && Character.isLetterOrDigit(k) && joinAddress.length() < 60) joinAddress.append(Character.toLowerCase((char) k));
+            if (!command && in.pressed(k) && Character.isLetterOrDigit(k) && joinAddress.length() < 60) joinAddress.append(Character.toLowerCase((char) k));
         if (in.pressed(KeyEvent.VK_PERIOD)) joinAddress.append('.');
         if (in.pressed(KeyEvent.VK_SEMICOLON) && in.down(KeyEvent.VK_SHIFT)) joinAddress.append(':');
         if (in.pressed(KeyEvent.VK_MINUS)) joinAddress.append('-');
