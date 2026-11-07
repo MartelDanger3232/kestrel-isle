@@ -20,9 +20,23 @@ final class Characters {
             Mesh torso = Sculpts.part("torso", paint), head = Sculpts.part("head", paint);
             if (torsoExtra != null) torso.join(torsoExtra.smooth());
             if (headExtra != null) head.join(headExtra.smooth());
-            return rig(hips, torso, head, Sculpts.part("armU", paint), Sculpts.part("armL", paint), Sculpts.part("legU", paint), Sculpts.part("legL", paint), cape, capeCol);
+            Rig full = rig(hips, torso, head, Sculpts.part("armU", paint), Sculpts.part("armL", paint), Sculpts.part("legU", paint), Sculpts.part("legL", paint), cape, capeCol);
+            LOW.put(full, plain(skin, hair, top, bottom, boots, headExtra, torsoExtra, cape, capeCol));
+            return full;
         }
-        hips = new Mesh().tube(0, -.18f, 0, .205f, .14f, .17f, .115f, .2f, 12, top)
+        return plain(skin, hair, top, bottom, boots, headExtra, torsoExtra, cape, capeCol);
+    }
+
+    /** Stand-ins for characters seen from afar: the same skeleton built from a few hundred triangles instead of the sculpt's thousands. */
+    private static final java.util.Map<Rig, Rig> LOW = new java.util.IdentityHashMap<>();
+
+    /** The cheap stand-in for a sculpted rig (or the rig itself if it has none). */
+    static Rig low(Rig r) { return LOW.getOrDefault(r, r); }
+
+    /** A humanoid built from primitives: the look before the sculpts, and every sculpted character's far-away stand-in. */
+    private static Rig plain(int skin, int hair, int top, int bottom, int boots, Mesh headExtra, Mesh torsoExtra, boolean cape, int capeCol) {
+        int hairShade = M.scale(hair, .75f), skinShade = M.scale(skin, .82f);
+        Mesh hips = new Mesh().tube(0, -.18f, 0, .205f, .14f, .17f, .115f, .2f, 12, top)
                 .tube(0, -.015f, 0, .175f, .12f, .175f, .12f, .065f, 12, 0x3a2a1e)
                 .box(0, .018f, .121f, .035f, .028f, .008f, 0xc8a050).smooth();
         Mesh torso = new Mesh().tube(0, 0, 0, .165f, .105f, .205f, .125f, .36f, 12, top)
@@ -393,6 +407,35 @@ final class Characters {
             new Mesh().blob(0, .1f, -.03f, .17f, .14f, .16f, 2, 8, 0xe8dcc0, 0).box(0, .02f, .135f, .1f, .03f, .02f, 0xc8643a),
             new Mesh().box(0, .02f, 0, .21f, .05f, .15f, 0xc8643a), true, 0xd8b884);
     static final Rig CHILD = humanoid(0xf0c098, 0xc8782a, 0xd8a83a, 0x4a6a9a, LEATHER, null, null, false, 0);
+
+    // ---- townsfolk and the royal guard ----------------------------------------------------------
+
+    /** Everyday islanders for the towns: the same body in ten sets of clothes, some with hats, caps or aprons. */
+    static final Rig[] FOLK = new Rig[10];
+
+    static {
+        int[] skins = {0xe0b090, 0xc89a74, 0xa87a54, 0xf0c8a0, 0x8a5a3a};
+        int[] hairs = {0x2a1a10, 0x8a4a20, 0xd8b060, 0x5a3a24, 0x1a120c, 0xa8a8a8};
+        int[] tops = {0x8a3a3a, 0x3a6a8a, 0x5a7a3a, 0xc8a050, 0x6a4a7a, 0xd8d0c0, 0x3a5a5a, 0xa86a3a, 0x7a2a4a, 0x4a4a6a};
+        int[] bottoms = {0x4a3a2a, 0x3a3a48, 0x5a4a3a, 0x2a3a4a, 0x6a5a48};
+        for (int i = 0; i < FOLK.length; i++) {
+            Mesh hat = i % 3 == 0 ? new Mesh().prism(0, .27f, 0, .2f, .13f, .1f, 8, M.scale(tops[i], .7f))
+                    : i % 3 == 2 ? new Mesh().prism(0, .22f, -.02f, .15f, .14f, .07f, 8, 0xe8e0d0) : null;
+            Mesh apron = i % 4 == 1 ? new Mesh().box(0, -.02f, .13f, .15f, .2f, .01f, 0xe8e0d0) : null;
+            FOLK[i] = humanoid(skins[i % skins.length], hairs[i * 7 % hairs.length], tops[i], bottoms[i * 3 % bottoms.length], i % 2 == 0 ? LEATHER : 0x2a2420,
+                    hat, apron, false, 0);
+        }
+    }
+
+    /** Outlaws: a dark red hood, a scarf across the face, and road-worn leathers. */
+    static final Rig BANDIT = humanoid(0xc08a64, 0x1a120c, 0x5a3a2a, 0x3a3028, 0x2a2018,
+            new Mesh().blob(0, .19f, -.03f, .145f, .14f, .155f, 3, 10, 0x6a1e1e, 0).box(0, .1f, .12f, .1f, .045f, .03f, 0x3a2a24),
+            new Mesh().box(0, .3f, 0, .19f, .05f, .145f, 0x6a1e1e), false, 0);
+
+    /** The royal guard: a steel helm, a blue tabard with a gold band over a breastplate, and a crimson cape. */
+    static final Rig GUARD = humanoid(0xd0a07c, 0x3a2a1e, 0x2a4a9a, 0x3a3a48, 0x2a2420,
+            new Mesh().blob(0, .2f, -.01f, .14f, .12f, .15f, 3, 10, 0xa8acb4, 0).prism(0, .3f, 0, .02f, .02f, .1f, 4, 0xc8a050),
+            new Mesh().box(0, .18f, .13f, .1f, .2f, .012f, 0xc8a050).box(0, .3f, 0, .19f, .1f, .14f, 0x9a9ea8), true, 0x9a2a2a);
 
     // ---- monsters -----------------------------------------------------------------------------
 

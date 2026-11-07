@@ -31,7 +31,7 @@ import java.util.zip.InflaterInputStream;
  */
 final class Coop {
     static final int PORT = 47777, MAX = 4;
-    private static final int HELLO = 1, WELCOME = 2, KEYS = 3, WORLD = 4, FULL = 5, DEV = 6, VERSION = 1;
+    private static final int HELLO = 1, WELCOME = 2, KEYS = 3, WORLD = 4, FULL = 5, DEV = 6, VERSION = 2;
     private static final Path PREFS = Story.SAVE.resolveSibling("coop.txt");
     /** Set from the command line: start hosting, or join this address, as soon as the island is ready. */
     static boolean autoHost;
@@ -319,6 +319,7 @@ final class Coop {
             Sync.writeArrays(o, pl.pods);
             Sync.writeList(o, pl.chests);
             Sync.writeList(o, pl.npcs);
+            Sync.writeList(o, pl.folk);
             for (List<Places.Pickup> chunk : pl.pickups) for (Places.Pickup p : chunk) o.writeBoolean(p.taken);
             if (g.dungeon != null) {
                 Sync.write(o, g.dungeon);
@@ -409,6 +410,7 @@ final class Coop {
         Sync.readArrays(in, pl.pods);
         Sync.readList(in, pl.chests, () -> null);
         Sync.readList(in, pl.npcs, () -> null);
+        Sync.readList(in, pl.folk, () -> null);
         for (List<Places.Pickup> chunk : pl.pickups) for (Places.Pickup p : chunk) p.taken = in.readBoolean();
         if (g.dungeon != null) {
             Sync.read(in, g.dungeon);

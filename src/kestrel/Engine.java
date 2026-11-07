@@ -152,6 +152,8 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
     private DirectionalLightShadowFilter shadows;
     private SSAOFilter ssao;
     private int quality = 2, slow;
+    /** Q was pressed once on the pause screen; a second press quits. */
+    static boolean quitArmed;
     private WaterFilter water;
     private LightScatteringFilter rays;
     private Geometry sky, hudQuad, flashQuad;
@@ -230,6 +232,13 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
         swap(Models.SHOP, "buildings", "building_tavern");
         swap(Models.WELL, "buildings", "building_well");
         swap(Models.TENT, "decoration/props", "tent");
+        swap(Models.CASTLE, "buildings", "building_castle");
+        swap(Models.BARRACKS, "buildings", "building_barracks");
+        swap(Models.CHURCH, "buildings", "building_church");
+        swap(Models.TOWER, "buildings", "building_tower_A", "building_tower_B");
+        swap(Models.WINDMILL, "buildings", "building_windmill");
+        swap(Models.MARKET, "buildings", "building_market");
+        swap(Models.SMITHY, "buildings", "building_blacksmith");
         // The pack houses have their own windows; the warm light at night stays.
         swaps.put(Models.HOUSE_LIT, new Swap(new Spatial[0], 0));
         swaps.put(Models.SHOP_LIT, new Swap(new Spatial[0], 0));
@@ -275,7 +284,12 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
         // A bug in one frame must never freeze the game: report it and keep running.
         try {
             game.update(dt);
-            if (game.screen == Game.Screen.PAUSE && in.pressed(KeyEvent.VK_Q)) quit();
+            // Q also swaps items, and the game pauses itself whenever the window loses focus, so quitting takes Q twice.
+            if (game.screen != Game.Screen.PAUSE) quitArmed = false;
+            else if (in.pressed(KeyEvent.VK_Q)) {
+                if (quitArmed) quit();
+                quitArmed = true;
+            }
             draw(dt);
         } catch (RuntimeException e) {
             if (errors++ < 3) {
@@ -375,6 +389,9 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
         settled = false;
         clouds(scene.view.cloud);
         if (shotDir == null) Coop.auto(g);
+        // -Dkestrel.start=SHOT: skip the title and start posed as that dev screenshot (for measuring speed in a busy place).
+        String start = System.getProperty("kestrel.start");
+        if (start != null && Arrays.asList(Dev.SHOTS).contains(start)) Dev.setup(g, Arrays.asList(Dev.SHOTS).indexOf(start));
     }
 
     private void draw(float dt) {

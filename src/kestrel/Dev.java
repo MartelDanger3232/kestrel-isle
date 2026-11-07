@@ -12,7 +12,7 @@ import javax.imageio.ImageIO;
 final class Dev {
     private Dev() {}
 
-    static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night", "glide", "temple", "drake", "gear", "attire", "duel"};
+    static final String[] SHOTS = {"title", "village", "ride", "hero", "spell", "shrine", "forge", "boss", "north", "rimeholt", "wildlife", "night", "glide", "temple", "drake", "gear", "attire", "duel", "town", "reef", "wanted", "jobs"};
 
     static void shots(File dir) throws Exception {
         Story.saving = false;
@@ -50,7 +50,7 @@ final class Dev {
         g.gear.arrows = 20;
         g.time = 40 + i;
         g.screen = i == 0 ? Game.Screen.TITLE : Game.Screen.PLAY;
-        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f, 16, 12, 15, 10, 15.5f, 11}[i];
+        g.climate.hour = new float[]{9, 10, 16.5f, 11, 17.8f, 13, 12, 12, 11, 12, 8.5f, 21.5f, 16, 12, 15, 10, 15.5f, 11, 11, 12, 15, 10}[i];
         g.climate.update(0);
         switch (i) {
             case 0 -> {}
@@ -254,6 +254,49 @@ final class Dev {
                 wren.hero.swordOutT = 3;
                 g.camYaw = .5f;
                 g.camPitch = -.5f;
+            }
+            case 18, 20 -> {
+                // Kingsreach: the castle from one of the plaza's streets; for "wanted", with the guard closing in.
+                g.story.flags.add("intro");
+                Places.Town king = pl.towns.get(1);
+                float x = king.x() + 30, z = king.z() - 26, y = g.world.height(x, z);
+                h.place(x, y, z);
+                h.yaw = g.camYaw = M.atan2(king.x() - x, king.z() - z) + .35f;
+                g.camPitch = -.12f;
+                if (i == 20) {
+                    h.wanted = 3;
+                    h.seenT = 1;
+                    for (int k = 0; k < 4; k++) {
+                        float a = h.yaw + M.PI + (k - 1.5f) * .5f, gx = x + M.sin(a) * (6 + k), gz = z + M.cos(a) * (6 + k);
+                        Foe f = new Foe(Foe.Kind.GUARD, gx, g.world.height(gx, gz), gz);
+                        f.bits = k == 0 ? 1 : 0;
+                        f.setState(Foe.CHASE);
+                        g.foes.add(f);
+                    }
+                    g.camYaw = h.yaw + M.PI * .8f;
+                    pump(g, .4f);
+                }
+            }
+            case 21 -> {
+                // Kingsreach's job board, read.
+                g.story.flags.add("intro");
+                float[] bd = pl.boards.get(1);
+                h.place(bd[0] + 2, g.world.height(bd[0] + 2, bd[2] - 2), bd[2] - 2);
+                h.yaw = g.camYaw = M.atan2(bd[0] - h.x, bd[2] - h.z);
+                g.camPitch = -.15f;
+                g.gear.gleams = 420;
+                g.jobs.board(1);
+            }
+            case 19 -> {
+                // Down among the kelp on Brindle's nearest reef.
+                g.story.flags.add("intro");
+                float[] sc = pl.schools.get(0);
+                h.place(sc[0] - 6, World.WATER, sc[2] - 6);
+                pump(g, .3f);
+                h.st = Hero.State.DIVE;
+                h.y = sc[1] - 1;
+                h.yaw = g.camYaw = M.atan2(6, 6);
+                g.camPitch = -.15f;
             }
             case 16 -> {
                 g.story.flags.add("intro");
@@ -977,6 +1020,193 @@ final class Dev {
         check(g.gear.songs == (1 << Story.SONG_NAMES.length) - 1, "F takes every song in the tab at once");
         tap(g, in, KeyEvent.VK_OPEN_BRACKET);
         check(g.screen == Game.Screen.PLAY, "[ closes the dev pack");
+        int before = g.foes.size() - (g.drake != null && g.foes.contains(g.drake) ? 1 : 0);
+        int summonTab = java.util.List.of(Game.DEV_TABS).indexOf("Summon");
+        for (Foe.Kind k : Foe.Kind.values()) g.devGive(summonTab, k.ordinal(), false);
+        check(g.foes.size() == before + Foe.Kind.values().length && g.drake != null && g.boss != null, "the dev pack can summon every creature, bosses included");
+        g.hero.hp = 999;
+        for (int i = 0; i < 300; i++) g.update(1 / 60f);
+        for (Foe.Kind k : Foe.Kind.values()) for (int i = g.foes.size() - 1; i >= 0; i--) if (g.foes.get(i).kind == k) g.foes.remove(i);
+        g.boss = null;
+        g.drake = null;
+        g.hero.hp = g.hero.maxHp;
+    }
+
+    /** The towns, the law and the royal guard: Kingsreach and a grown Brindle, crimes, the hunt, and getting away. */
+    private static void lawTests(Game g, Input in) {
+        Places pl = g.world.places;
+        Hero h = g.hero;
+        Places.Town king = null;
+        for (Places.Town t : pl.towns) if (t.name().equals("Kingsreach")) king = t;
+        int inKing = 0;
+        for (Places.Building b : pl.buildings) if (king != null && M.dist(b.x(), b.z(), king.x(), king.z()) < king.radius()) inKing++;
+        check(king != null && inKing >= 35 && pl.folk.size() >= 50, "Kingsreach is a big town (" + inKing + " buildings) and the towns are busy (" + pl.folk.size() + " townsfolk)");
+        boolean open = true;
+        for (Places.Npc n : pl.folk) open &= g.field.floor(n.x, n.z) < n.y + .6f && n.y > World.WATER;
+        check(open, "every townsperson starts out on open, dry ground");
+        g.screen = Game.Screen.PLAY;
+        h.st = Hero.State.MOVE;
+        h.hp = h.maxHp;
+        h.wanted = 0;
+        Places.Npc victim = pl.folk.get(0);
+        h.place(victim.x, victim.y, victim.z - 1.2f);
+        h.yaw = 0;
+        g.swordStrike(h, 90, 2.2f, 1);
+        check(victim.hp < 4 && h.wanted == 1 && victim.fleeT > 0, "striking a townsperson is a crime: one star, and they run");
+        for (int i = 0; i < 6 && victim.downT <= 0; i++) {
+            victim.flash = 0;
+            h.place(victim.x, victim.y, victim.z - 1.2f);
+            g.swordStrike(h, 90, 2.2f, 1);
+        }
+        check(victim.downT > 0 && h.wanted >= 2, "killing them makes it worse (" + h.wanted + " stars)");
+        run(g, 7);
+        int hunters = 0;
+        for (Foe f : g.foes) if (f.kind == Foe.Kind.GUARD && (f.bits & 2) != 0) hunters++;
+        check(hunters >= 1, "the royal guard send reinforcements after a wanted player (" + hunters + ")");
+        h.hp = h.maxHp;
+        boolean struck = false;
+        for (int i = 0; i < 14 && !struck; i++) {
+            run(g, 1);
+            struck = h.hp < h.maxHp;
+        }
+        check(struck && h.wanted > 0, "the guard catch up and strike");
+        h.hp = h.maxHp;
+        // Gone over the hills, out of every guard's sight.
+        h.place(pl.campX, g.world.height(pl.campX, pl.campZ), pl.campZ);
+        h.seenT = 0;
+        run(g, 30);
+        hunters = 0;
+        for (Foe f : g.foes) if (f.kind == Foe.Kind.GUARD && (f.bits & 2) != 0 && f.alive()) hunters++;
+        check(h.wanted == 0 && hunters == 0, "far away and out of sight long enough, the hunt is called off (" + h.wanted + " stars, " + hunters + " guards)");
+        h.place(victim.hx, g.world.height(victim.hx, victim.hz), victim.hz - 3);
+        g.summon(Foe.Kind.GUARD);
+        Foe guard = g.foes.get(g.foes.size() - 1);
+        guard.damage(g, Foe.SWORD, 1, guard.x, guard.y + 1, guard.z);
+        check(h.wanted == 1, "striking a guard who wasn't after you is a crime too");
+        float[] pose = Characters.GUARD.newPose();
+        Characters.THRUST.apply(.2f, 1, pose);
+        check(pose[Characters.GUARD.part("armUR") * 3] != 0 && pose[Characters.GUARD.part("capeU") * 3] == 0,
+                "the halberd thrust (made for a body without a cape) fits the caped guard");
+        h.wanted = 0;
+        g.foes.remove(guard);
+        h.hp = h.maxHp;
+    }
+
+    /** Job boards and their jobs, carriages, homes, fines and pickpocketing, all through the keys a player would press. */
+    private static void jobTests(Game g, Input in) {
+        Places pl = g.world.places;
+        Hero h = g.hero;
+        Game.Gear gr = g.gear;
+        g.screen = Game.Screen.PLAY;
+        h.st = Hero.State.MOVE;
+        h.wanted = 0;
+        h.hp = h.maxHp;
+        check(pl.boards.size() == 2 && pl.carriages.size() == 4 && pl.homes.size() == 2 && g.jobs.offers(0).size() == 3,
+                "both towns have a job board and a house for sale, and four carriage stands link the settlements");
+        // A bounty: the gang turns up at the spot, and bringing them all down pays.
+        int gleams = gr.gleams;
+        float[] at = {pl.campX + 60, pl.campZ + 40};
+        g.jobs.accept(new Jobs.Offer(Jobs.BOUNTY, 4, at[0], at[1], 450, "test"));
+        run(g, .1f);
+        java.util.List<Foe> gang = new java.util.ArrayList<>();
+        for (Foe f : g.foes) if (f.job && f.alive()) gang.add(f);
+        check(gang.size() == 4 && gang.stream().anyMatch(f -> f.kind == Foe.Kind.BANDIT && (f.bits & 1) != 0), "a bounty puts the outlaw and their gang at the spot");
+        for (Foe f : gang) f.damage(g, Foe.BOMB, 100, f.x, f.y + 1, f.z);
+        check(gr.job == Jobs.NONE && gr.gleams >= gleams + 450 && gr.renown >= 1 && h.wanted == 0, "bringing down the whole gang pays the bounty (and isn't a crime)");
+        // A delivery to another carriage stand.
+        float[] stand = pl.carriages.get(1);
+        g.jobs.accept(new Jobs.Offer(Jobs.DELIVER, 1, stand[0], stand[2], 100, "test"));
+        h.place(stand[0] + 2, g.world.height(stand[0] + 2, stand[2]), stand[2]);
+        run(g, .1f);
+        check(gr.job == Jobs.NONE, "a parcel is delivered on reaching its carriage stand");
+        // Pearl diving: three pearls appear on the reef.
+        float[] sc = pl.schools.get(1);
+        g.jobs.accept(new Jobs.Offer(Jobs.PEARLS, 3, sc[0], sc[2], 260, "test"));
+        run(g, .1f);
+        boolean three = g.jobs.pearls.size() == 3;
+        for (float[] p : new java.util.ArrayList<>(g.jobs.pearls)) {
+            h.place(p[0], p[1], p[2]);
+            g.jobs.progress();
+        }
+        check(three && gr.job == Jobs.NONE, "pearl diving: three pearls lie on the reef, and gathering them finishes the job");
+        // The carriage: E at the stand opens the destinations; E again rides there for the fare.
+        float[] c0 = pl.carriages.get(0);
+        h.place(c0[0] + 1.5f, g.world.height(c0[0] + 1.5f, c0[2]), c0[2]);
+        g.screen = Game.Screen.PLAY;
+        h.st = Hero.State.MOVE;
+        gr.gleams = 100;
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_E);
+        boolean menu = g.screen == Game.Screen.PICK;
+        tap(g, in, KeyEvent.VK_E);
+        check(menu && gr.gleams == 100 - Jobs.FARE && M.dist(h.x, h.z, c0[0], c0[2]) > 200, "a carriage carries you to another settlement for the fare");
+        // A house: buy it, then sleep in it like at a shrine.
+        float[] home = pl.homes.get(0);
+        gr.gleams = Jobs.HOME_PRICE + 10;
+        h.place(home[0], home[1], home[2]);
+        g.screen = Game.Screen.PLAY;
+        h.st = Hero.State.MOVE;
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_E);
+        boolean bought = (gr.homes & 1 << (int) home[4]) != 0 && gr.gleams == 10;
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_E);
+        check(bought && g.screen == Game.Screen.REST, "buy a house, then sleep there to rest and save");
+        g.screen = Game.Screen.PLAY;
+        h.st = Hero.State.MOVE;
+        // Fines: with two stars, the board offers to take 300 gleams to clear them.
+        float[] bd = pl.boards.get(0);
+        h.place(bd[0] + 1, g.world.height(bd[0] + 1, bd[2]), bd[2]);
+        h.wanted = 2;
+        h.seenT = 0;
+        h.heat = 99;
+        gr.gleams = 400;
+        run(g, .1f);
+        tap(g, in, KeyEvent.VK_E);
+        tap(g, in, KeyEvent.VK_E);
+        check(h.wanted == 0 && gr.gleams == 100, "paying a fine at a job board clears your wanted level");
+        g.screen = Game.Screen.PLAY;
+        // Pickpocketing: it works or the mark catches you (and that's a crime).
+        Places.Npc mark = pl.folk.get(3);
+        mark.downT = 0;
+        mark.robT = 0;
+        h.place(mark.x - M.sin(mark.yaw) * 1.2f, mark.y, mark.z - M.cos(mark.yaw) * 1.2f);
+        gleams = gr.gleams;
+        g.jobs.steal();
+        check(gr.gleams > gleams && h.wanted == 0 || gr.gleams == gleams && h.wanted == 1, "L picks a pocket, or gets you caught and wanted");
+        h.wanted = 0;
+        h.hp = h.maxHp;
+        for (Foe.Kind k : Foe.Kind.values()) g.foes.removeIf(f -> f.kind == Foe.Kind.GUARD && (f.bits & 2) != 0);
+    }
+
+    /** Reefs, diving, breath and drowning. */
+    private static void diveTests(Game g, Input in) {
+        Places pl = g.world.places;
+        Hero h = g.hero;
+        g.screen = Game.Screen.PLAY;
+        h.st = Hero.State.MOVE;
+        check(pl.reef.size() > 100 && pl.schools.size() >= 8, "reefs grow in the shallows (" + pl.reef.size() + " pieces, " + pl.schools.size() + " fish schools)");
+        int sunk = 0;
+        for (Places.Chest c : pl.chests) if (c.y < -4) sunk++;
+        check(sunk >= 4, "chests lie on the sea floor in wrecks and ruins (" + sunk + ")");
+        float[] sc = pl.schools.get(0);
+        h.place(sc[0], World.WATER, sc[2]);
+        run(g, .5f);
+        boolean swam = h.st == Hero.State.SWIM;
+        in.force(KeyEvent.VK_CONTROL, true);
+        run(g, 3);
+        check(swam && h.st == Hero.State.DIVE && h.y < -4, "Ctrl dives below the surface (y " + h.y + ")");
+        h.hp = h.maxHp;
+        run(g, 31);
+        in.force(KeyEvent.VK_CONTROL, false);
+        check(h.breath <= 0 && h.hp < h.maxHp, "staying down too long runs out of air and hurts");
+        h.hp = h.maxHp;
+        in.force(KeyEvent.VK_SPACE, true);
+        run(g, 10);
+        in.force(KeyEvent.VK_SPACE, false);
+        run(g, 1);
+        check(h.st == Hero.State.SWIM && h.breath > 0, "Space swims back up for air");
+        h.hp = h.maxHp;
     }
 
     private static void tap(Game g, Input in, int key) {
@@ -1318,6 +1548,9 @@ final class Dev {
         gustTests(g, in);
         duelTests(g, in);
         devTests(g, in);
+        lawTests(g, in);
+        diveTests(g, in);
+        jobTests(g, in);
         try {
             coopTests(g, in);
         } catch (java.io.IOException e) {

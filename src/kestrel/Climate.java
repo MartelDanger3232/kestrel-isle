@@ -16,6 +16,8 @@ final class Climate {
     private static final float[] TARGET_COVER = {.3f, .68f, .9f, 1}, TARGET_OVERCAST = {.05f, .45f, .85f, 1};
 
     float hour = 8.5f, overcast, rain, cloudCover = .3f, lightning;
+    /** Days gone by, for things that change daily (the job boards). */
+    int day;
     int weather = CLEAR;
     private float weatherT = 240;
     float sunX, sunY, sunZ;
@@ -23,7 +25,11 @@ final class Climate {
     private final Random rng = new Random(5);
 
     void update(float dt) {
-        hour = (hour + dt * 24 / 960f) % 24;
+        hour += dt * 24 / 960f;
+        if (hour >= 24) {
+            hour -= 24;
+            day++;
+        }
         weatherT -= dt;
         if (weatherT <= 0) {
             float q = rng.nextFloat();

@@ -83,10 +83,31 @@ final class Life {
         Hero h = g.hero;
         boolean night = g.climate.isNight();
         float[] pos = new float[2];
-        for (Places.Npc n : w.places.npcs) {
+        for (Places.Npc n : w.places.everyone) {
+            n.flash = Math.max(0, n.flash - dt * 4);
+            n.robT = Math.max(0, n.robT - dt);
+            if (n.downT > 0) {
+                // Out cold (or, for townsfolk, dead): back on their feet at home when the time's up.
+                if ((n.downT -= dt) <= 0) {
+                    n.hp = 4;
+                    n.fleeT = 0;
+                    if (n.folk) {
+                        n.x = n.tx = n.hx;
+                        n.z = n.tz = n.hz;
+                    }
+                }
+                continue;
+            }
             float near = M.dist(n.x, n.z, h.x, h.z);
             if (near > 150) continue;
-            boolean hold = near < 4.5f || g.screen == Game.Screen.DIALOG && near < 9;
+            // Anyone hurt, or near trouble, or near a wanted player, runs.
+            boolean scared = (n.fleeT -= dt) > 0 || h.wanted > 0 && near < 18;
+            if (scared) {
+                float away = near < .1f ? 1 : near;
+                n.tx = n.x + (n.x - h.x) / away * 6;
+                n.tz = n.z + (n.z - h.z) / away * 6;
+            }
+            boolean hold = !scared && (near < 4.5f || g.screen == Game.Screen.DIALOG && near < 9);
             float dx = n.tx - n.x, dz = n.tz - n.z, d = M.hypot(dx, dz);
             if (hold || d < .3f) {
                 n.walk = M.approach(n.walk, 0, 6, dt);
@@ -94,8 +115,8 @@ final class Life {
                 if (!hold && d < .3f && (night || n.wander <= 0)) n.yaw = M.turn(n.yaw, n.hyaw, 3 * dt);
             } else {
                 boolean child = n.id().equals("child");
-                float sp = child ? 2.6f : 1.2f;
-                n.walk = M.approach(n.walk, child ? 1.5f : 1, 4, dt);
+                float sp = scared ? 4.2f : child ? 2.6f : 1.2f;
+                n.walk = M.approach(n.walk, scared || child ? 1.5f : 1, 4, dt);
                 float nx = n.x + dx / d * sp * dt, nz = n.z + dz / d * sp * dt;
                 if (g.field.floor(nx, nz) > n.y + .6f || w.height(nx, nz) < World.WATER + .3f) {
                     n.tx = n.x;

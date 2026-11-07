@@ -103,8 +103,12 @@ final class Rig {
             int k1 = Math.min(k + 1, times.length - 1);
             float span = times[k1] - times[k], f = span > 0 ? M.smooth(0, 1, (tt - times[k]) / span) : 1;
             float[] a = poses[k], b = poses[k1];
-            for (int i = 0; i < out.length; i++)
-                if (mask[i]) out[i] = M.lerp(out[i], a[i] + (b[i] - a[i]) * f, w);
+            // A clip made on a rig without a cape still fits one with: the shared parts line up, and the root is always last.
+            int parts = Math.min(mask.length, out.length) - 3;
+            for (int i = 0; i < mask.length; i++) {
+                int o = i < mask.length - 3 ? i : out.length - (mask.length - i);
+                if (mask[i] && (i >= mask.length - 3 || i < parts)) out[o] = M.lerp(out[o], a[i] + (b[i] - a[i]) * f, w);
+            }
         }
     }
 

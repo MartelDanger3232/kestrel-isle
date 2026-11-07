@@ -22,10 +22,19 @@ final class Places {
         private final String id;
         private final Rig rig;
         float x, y, z, yaw, walk, phase, wait, tx, tz;
+        /** Hit points; while down they're out cold (or, for townsfolk, dead) until downT runs out. fleeT: running scared. */
+        float hp = 4, downT, fleeT, flash, robT;
         final float hx, hz, hyaw, wander;
+        /** Townsfolk have a name of their own and only chatter; the island's named folk have stories. */
+        final boolean folk;
+        final String name;
 
-        Npc(String id, Rig rig, float x, float y, float z, float yaw, float wander) {
+        Npc(String id, Rig rig, float x, float y, float z, float yaw, float wander) { this(id, null, rig, x, y, z, yaw, wander); }
+
+        Npc(String id, String name, Rig rig, float x, float y, float z, float yaw, float wander) {
             this.id = id;
+            this.name = name;
+            folk = name != null;
             this.rig = rig;
             this.x = this.hx = this.tx = x;
             this.y = y;
@@ -48,6 +57,9 @@ final class Places {
     }
 
     record Sign(float x, float y, float z, float yaw, String text) {}
+
+    /** A town on the map: its name, its middle and how far its streets reach. */
+    record Town(String name, float x, float z, float radius) {}
 
     static final class Pickup {
         final int item;
@@ -85,7 +97,18 @@ final class Places {
     @SuppressWarnings("unchecked") final List<Pickup>[] pickups = new List[World.CHUNKS * World.CHUNKS];
     final List<Building> buildings = new ArrayList<>();
     final List<Box> boxes = new ArrayList<>();
+    /** The boxes again, filed by chunk, so a floor test only looks at buildings nearby. */
+    @SuppressWarnings("unchecked") private final List<Box>[] boxGrid = new List[World.CHUNKS * World.CHUNKS];
     final List<Npc> npcs = new ArrayList<>();
+    /** Townsfolk, and then everyone: the named islanders followed by the townsfolk. */
+    final List<Npc> folk = new ArrayList<>(), everyone = new ArrayList<>();
+    final List<Town> towns = new ArrayList<>();
+    /** Job boards {x, y, z, town, yaw}; homes for sale {door x, y, z, yaw, town}; carriage stands {x, y, z, yaw}, named in stops. */
+    final List<float[]> boards = new ArrayList<>(), homes = new ArrayList<>(), carriages = new ArrayList<>();
+    final List<String> stops = new ArrayList<>();
+    /** The sea floor's furnishings, {kind (KELP..PILLAR), x, y, z, yaw, scale}, and fish schools {x, y, z, radius}. */
+    final List<float[]> reef = new ArrayList<>(), schools = new ArrayList<>();
+    static final int KELP = 0, CORAL = 1, WRECK = 2, PILLAR = 3;
     final List<Sign> signs = new ArrayList<>();
     final List<Gate> gates = new ArrayList<>();
     final List<float[]> fires = new ArrayList<>();
@@ -238,9 +261,202 @@ final class Places {
         chest("dye-gold", 720.9f, 176.1f, M.PI);
         chest("dye-snow", 452, 1597, M.PI);
         chest("gleams-grove", grove[0] + 3, grove[1] - 2.5f, 2);
+        towns.add(new Town("Brindle", villageX, villageZ, 112));
+        town(villageX, villageZ, 52, 112, 26, new Mesh[]{Models.MARKET, Models.CHURCH, Models.WINDMILL, Models.SMITHY, Models.MARKET}, 22, 4, seed);
+        float[] kr = settle(600, 750, 4, .35f);
+        kingsreach(kr[0], kr[1], seed);
+        reefs(seed);
         scatter(seed);
+        everyone.addAll(npcs);
+        everyone.addAll(folk);
+        float size = World.CHUNK * World.CELL;
+        for (int i = 0; i < boxGrid.length; i++) boxGrid[i] = new ArrayList<>();
+        for (Box b : boxes)
+            for (int j = (int) (b.z0() / size); j <= (int) (b.z1() / size); j++)
+                for (int i = (int) (b.x0() / size); i <= (int) (b.x1() / size); i++)
+                    if (i >= 0 && j >= 0 && i < World.CHUNKS && j < World.CHUNKS) boxGrid[i + j * World.CHUNKS].add(b);
         // Later flattening may have softened a mesa's edge into a ramp; cut them sheer again.
         for (float[] m : mesas) stamp(m);
+    }
+
+    // ---- towns ----------------------------------------------------------------------------------
+
+    private static final String[] FOLK_NAMES = {"Abel", "Brannoc", "Cressa", "Dunstan", "Elsbet", "Fenwick", "Gilda", "Harrow", "Ilse", "Jory",
+            "Kestra", "Lorcan", "Mabry", "Nell", "Odran", "Perrin", "Quilla", "Roswen", "Saoirse", "Tamsin", "Ulric", "Verity", "Wystan",
+            "Yseult", "Aldous", "Bryony", "Cormac", "Delphine", "Edric", "Fennel", "Garrick", "Hollis", "Ione", "Jessamy", "Kit", "Linnet",
+            "Merrow", "Nesbit", "Oriel", "Pippa", "Rook", "Sorrel", "Thane", "Una", "Wren", "Bramwell", "Cosima", "Dorian", "Ember", "Fable",
+            "Godric", "Hester", "Iver", "Juniper", "Kerra", "Lowan", "Morwen", "Nye", "Osric", "Prue", "Rhosyn", "Silas"};
+
+    /** Kingsreach, the royal city: the castle in the middle, barracks and towers, and the guard who keep the king's peace. */
+    private void kingsreach(float cx, float cz, long seed) {
+        float y = Math.max(2, w.height(cx, cz));
+        flatten(cx, cz, 26, y);
+        building(Models.CASTLE, cx, y, cz, M.PI, 10.5f);
+        towns.add(new Town("Kingsreach", cx, cz, 140));
+        for (int i = 0; i < 4; i++) {
+            float a = i * M.TAU / 4 + M.PI / 4;
+            fires.add(new float[]{cx + M.sin(a) * 20, y, cz + M.cos(a) * 20});
+        }
+        signs.add(new Sign(cx + 3, y, cz - 24, 0, "KINGSREACH, the royal city.  Keep the king's peace: the royal guard hunts down anyone who breaks it."));
+        town(cx, cz, 40, 140, 42, new Mesh[]{Models.BARRACKS, Models.CHURCH, Models.MARKET, Models.MARKET, Models.SMITHY, Models.SHOP, Models.TOWER,
+                Models.TOWER, Models.BARRACKS, Models.WINDMILL, Models.TOWER, Models.TOWER, Models.MARKET}, 40, 10, seed * 7 + 1);
+        for (int i = 0; i < 4; i++) {
+            float a = i * M.TAU / 4;
+            foes.add(new float[]{Foe.Kind.GUARD.ordinal(), cx + M.sin(a) * 14, cz + M.cos(a) * 14});
+        }
+    }
+
+    /**
+     * Grows a town around (cx, cz): two ring streets and six spokes, then the landmarks and homes along both sides of the rings, each on a
+     * levelled pad of its own, facing the street. Last come the people: townsfolk living in the homes, and the guard walking the streets.
+     */
+    private void town(float cx, float cz, float r0, float r1, int houses, Mesh[] landmarks, int people, int watch, long seed) {
+        Random rnd = new Random(seed);
+        float[] rings = {r0 + (r1 - r0) * .3f, r1 - 8};
+        // Only where there's land: a ring that meets the sea breaks into separate streets rather than wading out as a causeway.
+        for (float R : rings) {
+            List<Float> run = new ArrayList<>();
+            for (int k = 0; k <= 48; k++) {
+                float a = k * M.TAU / 48, x = cx + M.sin(a) * R, z = cz + M.cos(a) * R;
+                if (w.height(x, z) > 1.2f) {
+                    run.add(x);
+                    run.add(z);
+                }
+                if ((w.height(x, z) <= 1.2f || k == 48) && run.size() >= 6) {
+                    float[] pts = new float[run.size()];
+                    for (int i = 0; i < pts.length; i++) pts[i] = run.get(i);
+                    path(pts);
+                }
+                if (w.height(x, z) <= 1.2f) run.clear();
+            }
+        }
+        for (int k = 0; k < 6; k++) {
+            float a = k * M.TAU / 6 + .3f, end = r0 * .7f;
+            while (end < r1 && w.height(cx + M.sin(a) * (end + 4), cz + M.cos(a) * (end + 4)) > 1.2f) end += 4;
+            if (end > r0) path(cx + M.sin(a) * r0 * .7f, cz + M.cos(a) * r0 * .7f, cx + M.sin(a) * end, cz + M.cos(a) * end);
+        }
+        // Building plots on a loose grid, nearest the middle first so the town stays close-knit; each faces the middle.
+        List<float[]> plots = new ArrayList<>();
+        for (float gx = -r1; gx <= r1; gx += 12)
+            for (float gz = -r1; gz <= r1; gz += 12) {
+                float d = M.hypot(gx, gz);
+                if (d >= r0 && d <= r1) plots.add(new float[]{cx + gx + (rnd.nextFloat() - .5f) * 3, cz + gz + (rnd.nextFloat() - .5f) * 3, d});
+            }
+        plots.sort((p, q) -> Float.compare(p[2], q[2]));
+        // A job board beside the first spoke road near the middle, and the carriage stand a little further out along it.
+        int ti = towns.size() - 1;
+        float ba = .3f, br = r0 * .8f, bx = cx + M.sin(ba) * br + M.cos(ba) * 3.5f, bz = cz + M.cos(ba) * br - M.sin(ba) * 3.5f;
+        boards.add(new float[]{bx, w.height(bx, bz), bz, ti, ba});
+        reserved.add(new float[]{bx, bz, 3});
+        float sx = cx + M.sin(ba) * (br + 10) + M.cos(ba) * 5, sz = cz + M.cos(ba) * (br + 10) - M.sin(ba) * 5;
+        carriages.add(new float[]{sx, w.height(sx, sz), sz, ba});
+        stops.add(towns.get(ti).name());
+        reserved.add(new float[]{sx, sz, 4});
+        List<float[]> doors = new ArrayList<>();
+        int placed = 0, want = landmarks.length + houses;
+        for (float[] plot : plots) {
+            if (placed >= want) break;
+            float x = plot[0], z = plot[1];
+            Mesh mesh = placed < landmarks.length ? landmarks[placed] : rnd.nextFloat() < .1f ? Models.SHOP : Models.HOUSE;
+            float size = footprint(mesh);
+            if (!buildable(x, z, size)) continue;
+            float yaw = M.atan2(cx - x, cz - z);
+            flatten(x, z, size, Math.max(1.5f, w.height(x, z)));
+            building(mesh, x, w.height(x, z), z, yaw, size);
+            if (mesh == Models.HOUSE || mesh == Models.SHOP) doors.add(new float[]{x + M.sin(yaw) * (size + 1.5f), z + M.cos(yaw) * (size + 1.5f), yaw});
+            if (mesh == Models.HOUSE && (homes(ti) == 0)) {
+                // The town's first house is for sale.
+                float dx = x + M.sin(yaw) * (size + .8f), dz = z + M.cos(yaw) * (size + .8f);
+                this.homes.add(new float[]{dx, w.height(dx, dz), dz, yaw, ti});
+                signs.add(new Sign(dx + M.cos(yaw) * 1.6f, w.height(dx, dz), dz - M.sin(yaw) * 1.6f, yaw, "FOR SALE: this fine house, " + Jobs.HOME_PRICE + " gleams. Sleep here as at a shrine."));
+            }
+            placed++;
+        }
+        for (int i = 0; i < people && !doors.isEmpty(); i++) {
+            float[] d = doors.get(rnd.nextInt(doors.size()));
+            int n = folk.size();
+            folk.add(new Npc("folk" + n, FOLK_NAMES[n % FOLK_NAMES.length], Characters.FOLK[n % Characters.FOLK.length], d[0], w.height(d[0], d[1]), d[1],
+                    d[2], 10 + rnd.nextFloat() * 16));
+        }
+        for (int i = 0; i < watch; i++) {
+            float a = i * M.TAU / watch + rnd.nextFloat() * .3f, R = rings[i % 2], x = cx + M.sin(a) * R, z = cz + M.cos(a) * R;
+            if (w.height(x, z) > 1.2f) foes.add(new float[]{Foe.Kind.GUARD.ordinal(), x, z});
+        }
+    }
+
+    private int homes(int town) {
+        int n = 0;
+        for (float[] hm : homes) if (hm[4] == town) n++;
+        return n;
+    }
+
+    /** How far a town building reaches from its middle (its levelled pad's radius). */
+    private static float footprint(Mesh m) {
+        if (m == Models.BARRACKS || m == Models.CHURCH) return 6;
+        if (m == Models.TOWER) return 3;
+        return 4.3f;
+    }
+
+    /** Dry ground, not too steep to level, clear of roads and of everything else already placed. */
+    private boolean buildable(float x, float z, float size) {
+        if (near(x, z, size * .6f) || w.height(x, z) < 1.5f || w.biomeAt(x, z) == World.PATH) return false;
+        float lo = 1e9f, hi = -1e9f;
+        for (int k = 0; k < 8; k++) {
+            float a = k * M.TAU / 8, px = x + M.sin(a) * size, pz = z + M.cos(a) * size, h = w.height(px, pz);
+            if (h < 1 || k % 2 == 0 && w.biomeAt(x + M.sin(a) * size * .8f, z + M.cos(a) * size * .8f) == World.PATH) return false;
+            lo = Math.min(lo, h);
+            hi = Math.max(hi, h);
+        }
+        return hi - lo < 7;
+    }
+
+    /** A town building with a square collider a little inside its footprint. */
+    private void building(Mesh mesh, float x, float y, float z, float yaw, float size) {
+        buildings.add(new Building(mesh, x, y, z, yaw));
+        float hx = mesh == Models.CASTLE ? 9.5f : mesh == Models.TOWER ? 2 : mesh == Models.MARKET ? 1.4f : size * .66f;
+        boxes.add(new Box(x - hx, z - hx, x + hx, z + hx));
+    }
+
+    // ---- under the sea --------------------------------------------------------------------------
+
+    /** Reefs in the shallows: kelp forests and coral, pearls, fish, and here and there a wreck or sunken ruin with a chest to find. */
+    private void reefs(long seed) {
+        Random rnd = new Random(seed ^ 0x5ea5eaL);
+        int made = 0;
+        for (int tries = 0; tries < 6000 && made < 16; tries++) {
+            // The first reefs are searched for off Brindle's shore, so there's always one close to home.
+            boolean home = tries < 800;
+            float x = home ? villageX + (rnd.nextFloat() - .5f) * 700 : 60 + rnd.nextFloat() * (World.EXTENT - 120);
+            float z = home ? villageZ + (rnd.nextFloat() - .5f) * 700 : 60 + rnd.nextFloat() * (World.EXTENT - 120), y = w.height(x, z);
+            if (home && made >= 2 || y > -7 || y < -24) continue;
+            boolean close = false, coast = false;
+            for (float[] r : schools) close |= M.dist(x, z, r[0], r[2]) < 140;
+            for (int k = 0; k < 8 && !coast; k++)
+                for (float d = 20; d < 160; d += 20) coast |= w.height(x + M.sin(k * M.TAU / 8) * d, z + M.cos(k * M.TAU / 8) * d) > 1;
+            if (close || !coast) continue;
+            for (int i = 0; i < 34; i++) {
+                float a = rnd.nextFloat() * M.TAU, d = 3 + rnd.nextFloat() * 24, px = x + M.sin(a) * d, pz = z + M.cos(a) * d, py = w.height(px, pz);
+                if (py > -2 || py < -40) continue;
+                reef.add(new float[]{rnd.nextFloat() < .55f ? KELP : CORAL, px, py, pz, rnd.nextFloat() * M.TAU, .7f + rnd.nextFloat() * .8f});
+            }
+            for (int i = 0; i < 2; i++) {
+                float a = rnd.nextFloat() * M.TAU, px = x + M.sin(a) * 10, pz = z + M.cos(a) * 10;
+                if (w.height(px, pz) < -2) addPickup(G20, px, w.height(px, pz) + .3f, pz, "pearl" + made + "-" + i);
+            }
+            if (made % 2 == 0) {
+                float yaw = rnd.nextFloat() * M.TAU, tilt = made % 4 == 0 ? WRECK : PILLAR;
+                reef.add(new float[]{tilt, x, y - .3f, z, yaw, 1});
+                if (tilt == PILLAR)
+                    for (int i = 0; i < 4; i++) {
+                        float a = yaw + i * M.TAU / 4, px = x + M.sin(a) * 6, pz = z + M.cos(a) * 6;
+                        reef.add(new float[]{PILLAR, px, w.height(px, pz), pz, a, .8f + rnd.nextFloat() * .4f});
+                    }
+                float cx = x + M.sin(yaw) * 3.5f, cz = z + M.cos(yaw) * 3.5f;
+                chests.add(new Chest((tilt == WRECK ? "wreck" : "ruin") + made, cx, w.height(cx, cz), cz, yaw));
+            }
+            schools.add(new float[]{x, y + 3 + rnd.nextFloat() * 3, z, 5 + rnd.nextFloat() * 5});
+            made++;
+        }
     }
 
     /** Sea stacks off Brindle's shore, {x, z, height above the sea}, each crowned with a grapple post. */
@@ -257,6 +473,8 @@ final class Places {
             collider(tx, tz, 2, 2.6f);
         }
         npcs.add(new Npc("ranger", Characters.RANGER, x + 2.5f, y, z - 2.2f, M.PI, 6));
+        carriages.add(new float[]{x + 9, w.height(x + 9, z + 3), z + 3, 0});
+        stops.add("Rangers' outpost");
         signs.add(new Sign(x + 4.5f, y, z - 10, 0, "RANGERS' OUTPOST  -  Mind the wolves.  Rimeholt stands north, atop the mesa."));
     }
 
@@ -277,6 +495,8 @@ final class Places {
             collider(tx, tz, 2, 2.6f);
         }
         npcs.add(new Npc("nomad", Characters.NOMAD, x + 2.4f, y, z - 2.4f, M.PI, 4));
+        carriages.add(new float[]{x + 9, y, z + 3, 0});
+        stops.add("Nomad camp");
         signs.add(new Sign(x + 4.5f, y, z - 9, 0, "SUNSCOUR NOMADS  -  Water, shade and stories.  The Sunscour Temple lies south-east."));
     }
 
@@ -493,6 +713,15 @@ final class Places {
     }
 
     /** Pushes a circle at (pos[0], pos[1]) with feet at y out of solid scenery. */
+    /** Whether (x, z) is inside a building. */
+    boolean inBuilding(float x, float z) {
+        float size = World.CHUNK * World.CELL;
+        int i = (int) (x / size), j = (int) (z / size);
+        if (i < 0 || j < 0 || i >= World.CHUNKS || j >= World.CHUNKS) return false;
+        for (Box b : boxGrid[i + j * World.CHUNKS]) if (x > b.x0() && x < b.x1() && z > b.z0() && z < b.z1()) return true;
+        return false;
+    }
+
     void collide(float[] pos, float y, float rad) {
         float size = World.CHUNK * World.CELL;
         int ci = (int) (pos[0] / size), cj = (int) (pos[1] / size);

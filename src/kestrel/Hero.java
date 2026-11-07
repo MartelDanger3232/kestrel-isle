@@ -4,7 +4,7 @@ import java.awt.event.KeyEvent;
 
 /** The hero: movement, lock-on combat, shield, items and every animation state. */
 final class Hero {
-    enum State { MOVE, AIR, ROLL, HOP, FLIP, ATTACK, CHARGE, SPIN, HURT, LEDGE, CLIMB, SWIM, AIM, HOLD, THROW, FLUTE, POSE, DEAD, CAST, DRINK, RIDE, LOOSE, GLIDE, HOVER }
+    enum State { MOVE, AIR, ROLL, HOP, FLIP, ATTACK, CHARGE, SPIN, HURT, LEDGE, CLIMB, SWIM, AIM, HOLD, THROW, FLUTE, POSE, DEAD, CAST, DRINK, RIDE, LOOSE, GLIDE, HOVER, DIVE }
 
     static final float RADIUS = .35f, GRAVITY = 26;
     private static final Rig R = Characters.HERO;
@@ -22,6 +22,12 @@ final class Hero {
     private boolean drank;
     float safeX, safeY, safeZ, pushT, ledgeY, ledgeT;
     int hp = 12, maxHp = 12, combo;
+    /** Seconds of air underwater; drownT spaces out the damage once it's gone. */
+    static final float BREATH = 30;
+    float breath = BREATH, drownT;
+    /** Wanted level (0-5 stars); heat: seconds left out of sight before the guard gives up; seenT: a guard saw them just now. */
+    int wanted;
+    float heat, seenT, lawT;
     State st = State.MOVE;
     Foe target;
     /** A duelling friend locked on to instead of a foe (see Game.rivals). */
@@ -65,7 +71,7 @@ final class Hero {
 
     boolean busy() { return st == State.POSE || st == State.FLUTE || st == State.DEAD; }
 
-    boolean onGround() { return st != State.AIR && st != State.HOP && st != State.FLIP && st != State.SWIM && st != State.GLIDE; }
+    boolean onGround() { return st != State.AIR && st != State.HOP && st != State.FLIP && st != State.SWIM && st != State.GLIDE && st != State.DIVE; }
 
     void setState(State s) {
         st = s;
@@ -225,6 +231,7 @@ final class Hero {
             }
             case CLIMB -> climb(dt, g, mz);
             case SWIM -> swim(dt, g, ix, iz);
+            case DIVE -> dive(dt, g, ix, iz);
             case AIM -> {
                 if (locked) faceTarget(dt, 14);
                 else yaw = g.camYaw;
@@ -611,6 +618,43 @@ final class Hero {
             return;
         }
         y = w - .45f + M.sin(stT * 2.4f) * .05f;
+        // Ctrl dives, wherever the water's deep enough to swim down into.
+        if (g.in.down(KeyEvent.VK_CONTROL) && f < w - 2.5f) {
+            setState(State.DIVE);
+            vy = -2.5f;
+            g.splash(x, w, z);
+            g.tip("dive", "Diving: steer as usual, hold Ctrl to go deeper and Space to rise. Watch your breath (the bubbles).");
+        }
+    }
+
+    /** Underwater: steer with the movement keys, hold Ctrl to go deeper and Space to rise. Air lasts BREATH seconds. */
+    private void dive(float dt, Game g, float ix, float iz) {
+        Level L = g.level;
+        if (moving) {
+            yaw = M.turn(yaw, M.atan2(ix, iz), 6 * dt);
+            phase += dt * 5;
+        }
+        vx = M.approach(vx, moving ? ix * 4.2f : 0, 6, dt);
+        vz = M.approach(vz, moving ? iz * 4.2f : 0, 6, dt);
+        float up = (g.in.down(KeyEvent.VK_SPACE) ? 3.4f : 0) - (g.in.down(KeyEvent.VK_CONTROL) ? 3.4f : 0) + .3f;
+        vy = M.approach(vy, up, 5, dt);
+        y += vy * dt;
+        step(L, vx * dt, vz * dt);
+        float w = L.water(x, z), f = L.floor(x, z);
+        if (y < f + .2f) {
+            y = f + .2f;
+            vy = Math.max(0, vy);
+        }
+        if (Float.isNaN(w) || f > w - 1.2f || y >= w - .45f && vy > 0) {
+            if (!Float.isNaN(w)) g.splash(x, w, z);
+            setState(State.SWIM);
+            return;
+        }
+        if ((breath -= dt) <= 0 && (drownT -= dt) <= 0) {
+            drownT = 1.5f;
+            g.say("Out of air! Swim up (Space)!");
+            g.hurtHero(2, x - M.sin(yaw), z - M.cos(yaw));
+        }
     }
 
     /** Snaps to the ground, starting a fall (with the classic hop off running edges). */
@@ -744,8 +788,10 @@ final class Hero {
         if (st == State.HOLD) g.dropBomb(this);
         if (hp <= 0) {
             hp = 0;
+            // The dead are wanted by nobody.
+            wanted = 0;
             pose(State.DEAD, Characters.H_DEAD);
-        } else if (st != State.SWIM && st != State.CLIMB) {
+        } else if (st != State.SWIM && st != State.DIVE && st != State.CLIMB) {
             setState(State.HURT);
             anim.restart(Characters.H_HURT, .04f);
         }
@@ -753,6 +799,11 @@ final class Hero {
     }
 
     private void animate(float dt, Game g) {
+        // Air comes back once the hero's out from under the water (animate runs every frame, whatever the state).
+        if (st != State.DIVE) {
+            breath = Math.min(BREATH, breath + 15 * dt);
+            drownT = 0;
+        }
         // Heavy weapons swing slower, light ones faster.
         anim.update(st == State.ATTACK ? dt / Arms.TIME[g.gear.weapon] : dt);
         float speed = M.hypot(vx, vz);
@@ -771,7 +822,7 @@ final class Hero {
             case GLIDE -> anim.play(Characters.H_GLIDE, .2f);
             case HOVER -> anim.play(Characters.H_HOVER, .3f);
             case CLIMB -> anim.play(Characters.H_CLIMB, .15f);
-            case SWIM -> anim.play(Characters.H_SWIM, .2f);
+            case SWIM, DIVE -> anim.play(Characters.H_SWIM, .2f);
             case AIM -> {
                 if (aimClaw || stT > .35f) anim.play(Characters.H_AIM, .12f);
             }

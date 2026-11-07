@@ -63,6 +63,7 @@ final class Hud {
                     case TRAVEL -> travel();
                     case GEAR -> gear();
                     case DEV -> devPack();
+                    case PICK -> pick();
                     case OVER -> {
                         fill(new Color(20, 0, 0, (int) (200 * Math.min(1, g.overT))), 0, 0, w, h);
                         centered(huge, "You have fallen", h * .42f, INK);
@@ -128,6 +129,23 @@ final class Hud {
     private void playHud() {
         Hero hero = g.hero;
         Game.Gear gear = g.gear;
+        // Under the sea the light turns green-blue.
+        float sea = g.dungeon == null ? g.level.water(g.camX, g.camZ) : Float.NaN;
+        if (!Float.isNaN(sea) && g.camY < sea) fill(new Color(20, 90, 120, 70), 0, 0, w, h);
+        wanted(hero);
+        if (hero.st == Hero.State.DIVE || hero.breath < Hero.BREATH) {
+            // Breath: ten bubbles that pop as the air runs out.
+            for (int i = 0; i < 10; i++) {
+                float left = M.clamp(hero.breath / Hero.BREATH * 10 - i, 0, 1), bx = w / 2f - 135 * s + i * 30 * s, by = h - 150 * s;
+                g2.setColor(new Color(170, 225, 255, (int) (60 + 170 * left)));
+                g2.drawOval((int) (bx - 10 * s), (int) (by - 10 * s), (int) (20 * s), (int) (20 * s));
+                if (left > 0) {
+                    g2.setColor(new Color(120, 200, 245, (int) (200 * left)));
+                    float rr = 8 * s * left;
+                    g2.fillOval((int) (bx - rr), (int) (by - rr), (int) (2 * rr), (int) (2 * rr));
+                }
+            }
+        }
         int pips = (hero.maxHp + 3) / 4;
         for (int i = 0; i < pips; i++) {
             float x = 32 * s + (i % 10) * 28 * s, y = 34 * s + (i / 10) * 30 * s;
@@ -161,6 +179,7 @@ final class Hud {
         if (g.screen == Game.Screen.PLAY && g.story.objectiveTarget(goalAt)) marker(goalAt);
         if (g.screen == Game.Screen.PLAY)
             for (int q = 0; q < Story.QUESTS.length; q++) if (g.story.questTarget(q, goalAt)) questMarker(goalAt);
+        if (g.screen == Game.Screen.PLAY && g.jobs.target(goalAt)) questMarker(goalAt);
         if (g.horse.ridden && g.screen == Game.Screen.PLAY) centered(small, "Shift gallop  ·  Space jump  ·  click to swing  ·  E dismount  ·  G send Juniper away", h - 16 * s, DIM);
         if (g.tipT > 0 && g.tip != null && g.screen == Game.Screen.PLAY) {
             java.util.List<String> lines = wrap(g.tip, 560 * s);
@@ -302,6 +321,24 @@ final class Hud {
             text(small, Story.STAT_HOW[i], x + 260 * s, ly, DIM);
         }
         text(small, "W/S choose  ·  E raise  ·  Esc back", x + 24 * s, y + ph - 18 * s, DIM);
+    }
+
+    /** A job board or a carriage: a list of choices, each with a line of detail. */
+    private void pick() {
+        fill(new Color(0, 0, 0, 140), 0, 0, w, h);
+        Jobs j = g.jobs;
+        float pw = Math.min(w - 60 * s, 760 * s), ph = 110 * s + j.pickLines.size() * 64 * s, x = (w - pw) / 2, y = Math.max(20 * s, (h - ph) / 2);
+        panel(x, y, pw, ph);
+        text(big, j.pickTitle, x + 24 * s, y + 42 * s, GOLD);
+        for (int i = 0; i < j.pickLines.size(); i++) {
+            String[] line = j.pickLines.get(i);
+            float ly = y + 84 * s + i * 64 * s;
+            boolean sel = i == g.menuSel;
+            text(mid, (sel ? "▶  " : "    ") + line[0], x + 24 * s, ly, sel ? GOLD : INK);
+            java.util.List<String> more = wrap(line[1], pw - 90 * s);
+            for (int k = 0; k < Math.min(2, more.size()); k++) text(small, more.get(k), x + 62 * s, ly + 20 * s + k * 17 * s, DIM);
+        }
+        text(small, "W/S choose   ·   E take   ·   Esc close        Gleams " + g.gear.gleams, x + 24 * s, y + ph - 14 * s, DIM);
     }
 
     private void travel() {
@@ -481,7 +518,14 @@ final class Hud {
             for (String line : wrap(st == 2 ? Story.QUEST_BACK[q] : Story.QUEST_HOW[q], 270 * s)) text(small, line, x + 552 * s, qy += 18 * s, DIM);
             qy += 24 * s;
         }
-        if (open == 0) text(small, done > 0 ? "Nothing open right now." : "Talk to people. Some of them need help.", x + 540 * s, qy, DIM);
+        if (g.gear.job != Jobs.NONE) {
+            open++;
+            text(small, "Job from the board", x + 540 * s, qy, GOLD);
+            for (String line : wrap(g.jobs.describe(), 270 * s)) text(small, line, x + 552 * s, qy += 18 * s, DIM);
+            qy += 24 * s;
+        }
+        text(small, "Renown " + g.gear.renown + ": " + Jobs.title(g.gear.renown), x + 540 * s, y + 430 * s, DIM);
+        if (open == 0) text(small, done > 0 ? "Nothing open right now." : "Talk to people, or take a job from a town's board.", x + 540 * s, qy, DIM);
         if (done > 0) text(small, "Completed: " + done + " of " + Story.QUESTS.length, x + 540 * s, y + 448 * s, DIM);
         text(small, "I: gear   ·   Tab to close", x + pw - 190 * s, y + ph - 18 * s, DIM);
     }
@@ -561,8 +605,27 @@ final class Hud {
         }
         Game.DevItem sel = tab.get(g.devRow);
         text(mid, sel.name(), x + 480 * s, y + 130 * s, INK);
-        text(small, sel.has().getAsBoolean() ? "Already in your inventory." : "Press E to put it in your inventory.", x + 480 * s, y + 158 * s, DIM);
+        text(small, Game.DEV_TABS[g.devTab].equals("Summon") ? "Press E to summon it in front of you." : sel.has().getAsBoolean() ? "Already in your inventory." : "Press E to put it in your inventory.", x + 480 * s, y + 158 * s, DIM);
         text(small, "A/D tab   ·   W/S choose   ·   E take   ·   F take the whole tab   ·   [ close", x + pw - 600 * s, y + ph - 18 * s, DIM);
+    }
+
+    /** Wanted stars, top right: they flash while a guard can see you, and a bar shows how long until the guard give up. */
+    private void wanted(Hero hero) {
+        if (hero.wanted == 0) return;
+        boolean seen = hero.seenT > 0, blink = seen && (int) (g.time * 5) % 2 == 0;
+        for (int i = 0; i < 5; i++) {
+            float cx = w - 40 * s - (4 - i) * 34 * s, cy = 96 * s;
+            Polygon star = new Polygon();
+            for (int k = 0; k < 10; k++) {
+                float a = k * M.PI / 5, rr = (k % 2 == 0 ? 14 : 6) * s;
+                star.addPoint((int) (cx + M.sin(a) * rr), (int) (cy - M.cos(a) * rr));
+            }
+            g2.setColor(i < hero.wanted ? blink ? new Color(255, 90, 70) : GOLD : new Color(255, 255, 255, 50));
+            g2.fillPolygon(star);
+        }
+        String line = seen ? "WANTED: the royal guard can see you!" : "Out of sight: stay hidden to lose them";
+        text(small, line, w - 26 * s - g2.getFontMetrics(small).stringWidth(line), 132 * s, seen ? new Color(255, 120, 100) : INK);
+        if (!seen) bar(w - 40 * s - 4 * 34 * s - 14 * s, 140 * s, 4 * 34 * s + 28 * s, 6 * s, hero.heat / Game.escape(hero), GOLD);
     }
 
     private void map() {
@@ -576,6 +639,7 @@ final class Hud {
         for (Places.Gate gt : pl.gates) mark(x, y, size, gt.x, gt.z, names[gt.kind], gt.kind == Places.CROWN ? new Color(180, 120, 255) : GOLD);
         mark(x, y, size, pl.outpostX, pl.outpostZ, "Rangers' outpost", INK);
         mark(x, y, size, pl.campX, pl.campZ, "Nomad camp", INK);
+        for (Places.Town t : pl.towns) if (!t.name().equals("Brindle")) mark(x, y, size, t.x(), t.z(), t.name(), GOLD);
         float px = x + g.hero.x / World.EXTENT * size, py = y + (1 - g.hero.z / World.EXTENT) * size, fx = M.sin(g.hero.yaw), fy = -M.cos(g.hero.yaw), k = 11 * s;
         Polygon arrow = new Polygon();
         arrow.addPoint((int) (px + fx * k), (int) (py + fy * k));
@@ -600,7 +664,7 @@ final class Hud {
         String[] lines = {"WASD move  ·  mouse or arrow keys turn the camera  ·  Space roll (uses stamina)", "Shift hold to lock on (Space then side-hops or back-flips)",
                 "Click / J sword (combo; hold to charge a spin)  ·  K / right-click shield", "C cast spell  ·  V switch spell  ·  R drink an Ember Draught",
                 "Q swap sword/bow  ·  F use tool  ·  X switch tool  ·  Z or mouse wheel: next lock-on spot  ·  T flute", "E talk, open, ride, rest  ·  G send Juniper away  ·  H hint  ·  Tab satchel  ·  M map  ·  P duel (co-op)", "Dev:   `  skip objective   ·   =  jump to it   ·   ]  +1000 gleams   ·   [  dev pack (any item)",
-                "Enter / Esc resume   ·   Q quit"};
+                Engine.quitArmed ? "Press Q again to quit   ·   Enter / Esc resume" : "Enter / Esc resume   ·   Q Q quit"};
         for (int i = 0; i < lines.length; i++) centered(small, lines[i], h * .4f + i * 26 * s, i == 7 ? GOLD : INK);
     }
 }

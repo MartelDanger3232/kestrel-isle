@@ -8,7 +8,7 @@ import java.util.function.IntConsumer;
 
 /** The running game: levels, combat, projectiles, pickups and screen flow. Story content lives in Story. */
 final class Game {
-    enum Screen { TITLE, PLAY, DIALOG, FLUTE, MENU, MAP, PAUSE, OVER, END, REST, LEVEL, TRAVEL, GEAR, DEV, JOIN }
+    enum Screen { TITLE, PLAY, DIALOG, FLUTE, MENU, MAP, PAUSE, OVER, END, REST, LEVEL, TRAVEL, GEAR, DEV, JOIN, PICK }
 
     static final int ARROW = 0, FIREBALL = 1, SEED = 2, WATERBALL = 3, LANTERN = 4, ROCK = 5, P_EMBER = 6, P_FROST = 7, P_RADIANT = 8;
     static final int CONTAINER = 7;
@@ -22,6 +22,8 @@ final class Game {
         int weapon, weapons = 1, outfit, outfits = 1, dye, dyes = 1;
         int arrows, bombs, gleams, pieces, songs, stones, item;
         int hearts = 3, level = 1, vig, end, mnd, str, arc, swordLv, flasks = 3, maxFlasks = 3, spells, spell;
+        /** The job from a board (Jobs.NONE..CLEAR) and its progress; renown counts jobs done; homes owned, one bit per town. */
+        int job, jobGoal, jobDone, jobX, jobZ, jobPay, renown, homes;
     }
 
     static final class Shot {
@@ -90,6 +92,7 @@ final class Game {
     final Audio audio;
     final World world;
     final Field field;
+    final Jobs jobs = new Jobs(this);
     final Climate climate = new Climate();
     final Story story;
     final Magic magic;
@@ -243,13 +246,13 @@ final class Game {
     void spawnFieldFoes() {
         foes.clear();
         for (float[] f : world.places.foes)
-            foes.add(new Foe(f[0] == 4 ? Foe.Kind.IMP : f[0] == 5 ? Foe.Kind.WOLF : Foe.Kind.THORNLING, f[1], world.height(f[1], f[2]), f[2]));
+            foes.add(new Foe(Foe.Kind.values()[(int) f[0]], f[1], world.height(f[1], f[2]), f[2]));
     }
 
     // ---- frame update -------------------------------------------------------------------------
 
     /** Menus a co-op host can sit in while friends play on (a conversation still pauses the island). */
-    static final java.util.Set<Screen> MENUS = java.util.EnumSet.of(Screen.PAUSE, Screen.MENU, Screen.MAP, Screen.GEAR, Screen.DEV);
+    static final java.util.Set<Screen> MENUS = java.util.EnumSet.of(Screen.PAUSE, Screen.MENU, Screen.MAP, Screen.GEAR, Screen.DEV, Screen.PICK);
     /** Keys nobody presses, for the host's hero while they're in a menu. */
     private final Input calm = new Input();
 
@@ -294,6 +297,7 @@ final class Game {
                 else play(dt);
             }
             case JOIN -> joinScreen();
+            case PICK -> jobs.pickMenu();
         }
         if (coop != null && coop.hosting() && players.size() > 1 && MENUS.contains(shown) && MENUS.contains(screen)) idle(dt);
         if (coop != null) coop.after(dt);
@@ -416,10 +420,20 @@ final class Game {
             story.dungeonEvents();
             if (hero.y < -6 && dungeon.at(dungeon.ti(hero.x), dungeon.tj(hero.z)) != '~') fellInPit();
         }
-        // Each foe goes after whoever is nearest, so every rule it uses about "the hero" means that player.
+        for (Player p : players) {
+            Player was = as(p);
+            law(dt);
+            as(was);
+        }
+        // Each foe goes after whoever is nearest (a guard: whoever's wanted), so every rule it uses about "the hero" means that player.
         for (int i = 0; i < foes.size(); i++) {
             Foe f = foes.get(i);
-            Player prey = nearest(f.x, f.z);
+            Player prey = f.kind == Foe.Kind.GUARD ? hunted(f.x, f.z) : nearest(f.x, f.z);
+            if (f.kind == Foe.Kind.GUARD && (f.bits & 2) != 0 && M.dist(f.x, f.z, prey.hero.x, prey.hero.z) > 120) {
+                // A reinforcement left far behind just goes home.
+                f.state = Foe.DEAD;
+                f.deadT = 99;
+            }
             if (f.boss || M.dist(f.x, f.z, prey.hero.x, prey.hero.z) < 90) {
                 Player was = as(prey);
                 f.update(dt, this);
@@ -432,7 +446,8 @@ final class Game {
         updateDrops(dt);
         interactions();
         story.fieldEvents(dt);
-        if (in.pressed(KeyEvent.VK_E) && action != null && hero.st == Hero.State.MOVE) action.run();
+        if (in.pressed(KeyEvent.VK_E) && action != null && (hero.st == Hero.State.MOVE || hero.st == Hero.State.DIVE)) action.run();
+        if (in.pressed(KeyEvent.VK_L) && hero.st == Hero.State.MOVE && dungeon == null) jobs.steal();
     }
 
     private void fellInPit() {
@@ -523,7 +538,7 @@ final class Game {
     /** One thing the dev pack can hand over: its name, whether the hero has it, and how to give it. */
     record DevItem(String name, java.util.function.BooleanSupplier has, Runnable give) {}
 
-    static final String[] DEV_TABS = {"Weapons", "Outfits", "Dyes", "Tools", "Songs", "Spells", "Stones", "Supplies"};
+    static final String[] DEV_TABS = {"Weapons", "Outfits", "Dyes", "Tools", "Songs", "Spells", "Stones", "Supplies", "Summon"};
     int devTab, devRow;
     private List<List<DevItem>> devPack;
 
@@ -542,10 +557,10 @@ final class Game {
         List<DevItem> tab = tabs.get(devTab);
         if (in.any(KeyEvent.VK_W, KeyEvent.VK_UP)) devRow = (devRow + tab.size() - 1) % tab.size();
         if (in.any(KeyEvent.VK_S, KeyEvent.VK_DOWN)) devRow = (devRow + 1) % tab.size();
-        boolean all = in.pressed(KeyEvent.VK_F);
+        boolean summoning = DEV_TABS[devTab].equals("Summon"), all = !summoning && in.pressed(KeyEvent.VK_F);
         if (!all && !in.any(KeyEvent.VK_E, KeyEvent.VK_ENTER, KeyEvent.VK_SPACE)) return;
         audio.sfx(Audio.PICKUP);
-        say("DEV " + (all ? "took every one of the " + DEV_TABS[devTab].toLowerCase() : tab.get(devRow).name()));
+        say("DEV " + (summoning ? "summoned " : "") + (all ? "took every one of the " + DEV_TABS[devTab].toLowerCase() : tab.get(devRow).name()));
         // A co-op friend's gear lives on the host's island, so the host hands it over.
         if (coop != null && coop.joined()) {
             coop.dev(devTab, devRow, all);
@@ -629,12 +644,49 @@ final class Game {
                 new DevItem("Heart container", () -> gear.hearts >= 20, () -> gear.hearts = Math.min(20, gear.hearts + 1)),
                 new DevItem("Draught flask (refills them all)", () -> gear.maxFlasks >= 7, () -> gear.flasks = gear.maxFlasks = Math.min(7, gear.maxFlasks + 1)),
                 new DevItem("Everything at once", () -> false, () -> {
-                    for (int t = 0; t < DEV_TABS.length - 1; t++) for (DevItem it : devPack.get(t)) it.give().run();
+                    for (int t = 0; t < List.of(DEV_TABS).indexOf("Supplies"); t++) for (DevItem it : devPack.get(t)) it.give().run();
                     gear.bow = gear.bombBag = true;
                     gear.arrows = 50;
                     gear.bombs = 30;
                 })));
+        List<DevItem> summon = new ArrayList<>();
+        for (Foe.Kind k : Foe.Kind.values()) summon.add(new DevItem(foeName(k), () -> false, () -> summon(k)));
+        devPack.add(summon);
         return devPack;
+    }
+
+    static String foeName(Foe.Kind k) {
+        return switch (k) {
+            case BRAMBLE -> "Bramblemaw";
+            case GOLEM -> "Cinder Golem";
+            case SERPENT -> "Tide Serpent";
+            case KING -> "Hollow King";
+            case HOARWING -> "Hoarwing";
+            case ASHMAW -> "Ashmaw";
+            case STORMDRAKE -> "Stormdrake";
+            default -> k.name().charAt(0) + k.name().substring(1).toLowerCase();
+        };
+    }
+
+    /** Dev pack: puts a creature in front of the current player. Bosses come in fighting. */
+    void summon(Foe.Kind kind) {
+        float d = kind.ordinal() >= Foe.Kind.BRAMBLE.ordinal() ? 12 : 5;
+        float x = hero.x + M.sin(hero.yaw) * d, z = hero.z + M.cos(hero.yaw) * d;
+        Foe f = new Foe(kind, x, level.floor(x, z), z);
+        f.yaw = M.atan2(hero.x - x, hero.z - z);
+        if (kind == Foe.Kind.KING) f.y += 4;
+        if (kind == Foe.Kind.HOARWING) f.y += 7;
+        if (kind == Foe.Kind.STORMDRAKE) {
+            // Only one drake rides the island: the summoned one takes over from any still circling.
+            if (drake != null) foes.remove(drake);
+            drake = f;
+            f.y = hero.y + 13;
+            f.tx = M.sin(f.yaw);
+            f.tz = M.cos(f.yaw);
+            f.setState(Foe.ATTACK);
+        } else if (f.boss) f.setState(Foe.CHASE);
+        if (f.boss) boss = f;
+        foes.add(f);
     }
 
     /** A tab of numbered things kept as bits (songs, spells, stones). */
@@ -806,6 +858,7 @@ final class Game {
                     if (f.flash > .7f || f.hitTest(px, py, pz) == 0 && f.hitTest(px, h.y + .4f, pz) == 0) continue;
                     if (f.damage(this, spin ? Foe.SPIN : Foe.SWORD, dmg, px, f.hitTest(px, py, pz) > 0 ? py : h.y + .4f, pz)) hit = true;
                 }
+                if (hitPeople(px, py, pz, .3f, dmg)) hit = true;
                 if (dungeon != null) for (Dungeon.Thing t : dungeon.things) {
                     if (t.gone || t.hidden || M.dist(px, pz, t.x, t.z) > .9f) continue;
                     if (t.kind == 'o' && t.anim <= 0) {
@@ -828,6 +881,111 @@ final class Game {
             hit = true;
         }
         if (hit) shake(.12f);
+    }
+
+    // ---- the law ------------------------------------------------------------------------------
+
+    static final int ASSAULT = 0, MURDER = 1, GUARD_DOWN = 2;
+
+    /** The current player broke the king's peace: their wanted level rises, the guard hears of it and folk nearby run. */
+    void crime(int what) {
+        Hero h = hero;
+        int was = h.wanted;
+        h.wanted = Math.min(5, switch (what) {
+            case MURDER -> Math.max(2, h.wanted + 2);
+            case GUARD_DOWN -> Math.max(2, h.wanted + 1);
+            default -> Math.max(1, h.wanted);
+        });
+        h.seenT = 1;
+        h.heat = escape(h);
+        for (Places.Npc n : world.places.everyone) if (M.dist(n.x, n.z, h.x, h.z) < 40) n.fleeT = 12;
+        if (h.wanted > was) {
+            audio.sfx(Audio.SLAM);
+            say("WANTED " + "★".repeat(h.wanted) + "  The royal guard is coming. Get far away and out of sight to lose them.");
+        }
+    }
+
+    /** Seconds a wanted player must stay out of every guard's sight before the hunt is called off. */
+    static float escape(Hero h) { return 8 + 3 * h.wanted; }
+
+    /**
+     * Once a frame for the current player: while a guard can see them the hunt stays hot; out of sight it cools until the guard give up.
+     * While they're seen, reinforcements keep arriving, up to two guards for every star (knights from four stars up).
+     */
+    private void law(float dt) {
+        Hero h = hero;
+        if (h.wanted == 0) return;
+        if (h.st == Hero.State.DEAD) {
+            h.wanted = 0;
+            return;
+        }
+        if ((h.seenT -= dt) > 0) h.heat = escape(h);
+        else if ((h.heat -= dt) <= 0) {
+            h.wanted = 0;
+            audio.sfx(Audio.SECRET);
+            say(current.name + " lost the royal guard, and is no longer wanted.");
+            return;
+        }
+        // Reinforcements only come while a guard has eyes on them: break the line of sight and nobody new joins the hunt.
+        if (dungeon != null || h.seenT <= 0 || (h.lawT -= dt) > 0) return;
+        h.lawT = 3;
+        int hunting = 0;
+        for (Foe f : foes) if (f.kind == Foe.Kind.GUARD && f.alive() && f.state != Foe.IDLE && M.dist(f.x, f.z, h.x, h.z) < 90) hunting++;
+        if (hunting >= h.wanted * 2) return;
+        for (int k = 0; k < 12; k++) {
+            float a = rng.nextFloat() * M.TAU, d = 40 + rng.nextFloat() * 18, x = h.x + M.sin(a) * d, z = h.z + M.cos(a) * d, y = world.height(x, z);
+            if (y < World.WATER + .8f || world.slope(x, z) > .7f || field.floor(x, z) > y + .5f) continue;
+            Foe f = new Foe(Foe.Kind.GUARD, x, y, z);
+            f.bits = 2 | (h.wanted >= 4 ? 1 : 0);
+            if (h.wanted >= 4) f.hp = f.maxHp = f.maxHp * 2;
+            f.setState(Foe.CHASE);
+            f.yaw = M.atan2(h.x - x, h.z - z);
+            foes.add(f);
+            return;
+        }
+    }
+
+    /** The nearest wanted player still standing, for a guard; whoever's nearest if nobody's wanted. */
+    private Player hunted(float x, float z) {
+        Player best = null;
+        float bd = Float.MAX_VALUE;
+        for (Player p : players) {
+            float d = M.dist(x, z, p.hero.x, p.hero.z);
+            if (p.hero.wanted > 0 && p.hero.st != Hero.State.DEAD && d < bd) {
+                bd = d;
+                best = p;
+            }
+        }
+        return best != null ? best : nearest(x, z);
+    }
+
+    /**
+     * The current player strikes at (px, py, pz) (py NaN: at any height): anyone on the island within reach is hurt, and that's a crime.
+     * Townsfolk can be killed; the island's named folk are only knocked out, and get up again in a minute. True if someone was hit.
+     */
+    boolean hitPeople(float px, float py, float pz, float reach, float dmg) {
+        if (dungeon != null) return false;
+        boolean hit = false;
+        for (Places.Npc n : world.places.everyone) {
+            if (n.downT > 0 || n.flash > .5f) continue;
+            float dx = px - n.x, dy = Float.isNaN(py) ? 0 : py - n.y - 1, dz = pz - n.z;
+            if (dx * dx + dy * dy + dz * dz > (reach + .5f) * (reach + .5f)) continue;
+            n.hp -= dmg;
+            n.flash = 1;
+            hit = true;
+            sparks(n.x, n.y + 1.1f, n.z, 0xd04040, 8);
+            audio.sfx(Audio.HIT);
+            if (n.hp > 0) {
+                n.fleeT = 14;
+                crime(ASSAULT);
+                continue;
+            }
+            n.hp = 0;
+            n.downT = n.folk ? 150 : 60;
+            crime(MURDER);
+            say(Story.name(n) + (n.folk ? " is dead." : " is knocked out cold."));
+        }
+        return hit;
     }
 
     // ---- duels --------------------------------------------------------------------------------
@@ -896,6 +1054,12 @@ final class Game {
         Player from = of(by);
         for (Player p : new ArrayList<>(players))
             if (rivals(by, p.hero) && p.hero.invuln <= 0 && M.dist(p.hero.x, p.hero.z, x, z) < r) duelHit(p, from, dmg, x, z, false);
+        // Spells are no kinder to bystanders.
+        if (from != null) {
+            Player was = as(from);
+            hitPeople(x, Float.NaN, z, r, dmg);
+            as(was);
+        }
     }
 
     /** A duellist's arrow or spell striking a duelling friend; true if it hit. */
@@ -1087,6 +1251,7 @@ final class Game {
         if (M.dist(x, z, hero.x, hero.z) < 2.6f && Math.abs(y - hero.y - 1) < 2.5f) hurtHero(2, x + .1f, z, false);
         for (Foe f : new ArrayList<>(foes))
             if (M.dist(x, z, f.x, f.z) < 3.4f + f.radius() * .5f) f.damage(this, Foe.BOMB, 2, x, f.centerY(), z);
+        hitPeople(x, Float.NaN, z, 3.2f, 3);
         if (dungeon != null) for (Dungeon.Thing t : dungeon.things) {
             if (t.gone || M.dist(x, z, t.x, t.z) > 3.4f) continue;
             if (t.kind == 'X' && !t.on) {
@@ -1160,6 +1325,8 @@ final class Game {
 
     void foeDied(Foe f) {
         if (f.kind == Foe.Kind.WOLF) story.wolfDown();
+        if (f.kind == Foe.Kind.GUARD) crime(GUARD_DOWN);
+        jobs.foeDied(f);
         sparks(f.x, f.centerY(), f.z, 0x6a4a6a, 14);
         audio.sfx(Audio.STUN);
         if (f.kind == Foe.Kind.SLIME && f.size > .8f)
@@ -1224,6 +1391,12 @@ final class Game {
                         dead = true;
                         break;
                     }
+                if (!dead) {
+                    // Whoever loosed it answers for whoever it hits.
+                    Player shooter = s.owner == null ? null : of(s.owner), was = shooter == null ? null : as(shooter);
+                    if (hitPeople(s.x, s.y, s.z, .15f, s.dmg)) dead = true;
+                    if (shooter != null) as(was);
+                }
                 if (dungeon != null) for (Dungeon.Thing t : dungeon.things) {
                     if (t.gone || t.hidden) continue;
                     if (t.kind == 'o' && M.dist(s.x, s.z, t.x, t.z) < .8f && Math.abs(s.y - t.y - 1.5f) < .9f) {
@@ -1488,7 +1661,9 @@ final class Game {
         prompt = null;
         action = null;
         bestD = 1e9f;
-        if (hero.st != Hero.State.MOVE) return;
+        if (dungeon == null) jobs.progress();
+        // On foot, or underwater (for the sunken chests).
+        if (hero.st != Hero.State.MOVE && hero.st != Hero.State.DIVE) return;
         story.offers(hero);
     }
 

@@ -206,6 +206,43 @@ final class Models {
     static final Mesh ALTAR = m().vary(.05f).prism(0, 0, 0, 1.6f, 1.4f, .6f, 8, 0x8a8478).prism(0, .6f, 0, .5f, .4f, 1, 6, 0x7a746a)
             .blob(0, 1.9f, 0, .3f, .45f, .3f, 2, 4, 0x7ad8ff | Mesh.GLOW, 0);
 
+    // ---- the towns (on the graphics card these become KayKit buildings) -------------------------------
+
+    static final Mesh CASTLE = m().vary(.04f).box(0, 4, 0, 8, 4, 8, STONE).box(0, 9, 0, 4.5f, 1, 4.5f, STONE).prism(0, 10, 0, 6, 0, 3, 4, 0x3a5a9a)
+            .prism(-8, 0, -8, 2.2f, 2.2f, 11, 10, STONE).prism(8, 0, -8, 2.2f, 2.2f, 11, 10, STONE).prism(-8, 0, 8, 2.2f, 2.2f, 11, 10, STONE).prism(8, 0, 8, 2.2f, 2.2f, 11, 10, STONE)
+            .prism(-8, 11, -8, 2.6f, 0, 3, 10, 0x3a5a9a).prism(8, 11, -8, 2.6f, 0, 3, 10, 0x3a5a9a).prism(-8, 11, 8, 2.6f, 0, 3, 10, 0x3a5a9a).prism(8, 11, 8, 2.6f, 0, 3, 10, 0x3a5a9a)
+            .box(0, 2, 8.02f, 1.8f, 2, .05f, DARK);
+    static final Mesh BARRACKS = m().vary(.04f).box(0, 1.8f, 0, 5, 1.8f, 3.2f, 0x9a8a7a).prism(0, 3.6f, 0, 6.6f, 0, 2.2f, 4, 0x3a5a9a)
+            .box(0, 1.1f, 3.21f, .7f, 1.1f, .02f, 0x5a3a24);
+    static final Mesh CHURCH = m().vary(.04f).box(0, 2.4f, 0, 3, 2.4f, 5, PLASTER).prism(0, 4.8f, 0, 6.2f, 0, 2.6f, 4, ROOF)
+            .box(0, 5, -4, 1.4f, 5, 1.4f, PLASTER).prism(0, 10, -4, 2, 0, 3, 4, ROOF).box(0, 1.4f, 5.01f, .8f, 1.4f, .02f, 0x5a3a24);
+    static final Mesh TOWER = m().vary(.04f).prism(0, 0, 0, 2, 2, 9, 10, STONE).prism(0, 9, 0, 2.4f, 0, 3, 10, ROOF);
+    static final Mesh WINDMILL = m().vary(.04f).prism(0, 0, 0, 2.4f, 1.6f, 7, 8, PLASTER).prism(0, 7, 0, 2, 0, 2, 8, ROOF)
+            .box(0, 6, 2.2f, .2f, 3.6f, .05f, WOOD).box(0, 6, 2.2f, 3.6f, .2f, .05f, WOOD);
+    static final Mesh MARKET = m().vary(.04f).box(0, .5f, 0, 2.6f, .5f, 1.6f, WOOD).box(-2.4f, 1.3f, -1.4f, .1f, 1.3f, .1f, WOOD).box(2.4f, 1.3f, -1.4f, .1f, 1.3f, .1f, WOOD)
+            .box(-2.4f, 1.3f, 1.4f, .1f, 1.3f, .1f, WOOD).box(2.4f, 1.3f, 1.4f, .1f, 1.3f, .1f, WOOD).prism(0, 2.6f, 0, 3.6f, 0, 1, 4, 0xc84a3a);
+    static final Mesh SMITHY = m().vary(.04f).box(0, 1.6f, 0, 3, 1.6f, 2.5f, 0x8a7a6a).prism(0, 3.2f, 0, 4.4f, 0, 2, 4, 0x4a4a52)
+            .box(2, 3.6f, -1, .45f, 1.6f, .45f, 0x5a5048).box(0, 1.1f, 2.51f, .9f, 1.1f, .02f, DARK);
+
+    static final Mesh BOARD = m().vary(.05f).box(-1.1f, 1.1f, 0, .08f, 1.1f, .08f, WOOD).box(1.1f, 1.1f, 0, .08f, 1.1f, .08f, WOOD)
+            .box(0, 1.5f, 0, 1.2f, .6f, .05f, 0x8a6a42).prism(0, 2.2f, 0, 1.5f, 0, .4f, 4, ROOF)
+            .box(-.6f, 1.6f, .06f, .25f, .3f, .01f, 0xf0e8d0).box(.1f, 1.45f, .06f, .3f, .35f, .01f, 0xe8e0c8).box(.75f, 1.65f, .06f, .2f, .25f, .01f, 0xf4ecd8);
+    static final Mesh CART = m().vary(.05f).box(0, 1, 0, .9f, .35f, 1.6f, WOOD).box(0, .75f, 0, .95f, .06f, 1.65f, 0x6a4a2a)
+            .box(-1, .5f, .9f, .05f, .5f, .5f, 0x3a2a1e).box(1, .5f, .9f, .05f, .5f, .5f, 0x3a2a1e).box(-1, .5f, -.9f, .05f, .5f, .5f, 0x3a2a1e).box(1, .5f, -.9f, .05f, .5f, .5f, 0x3a2a1e)
+            .box(0, .9f, 2.4f, .05f, .05f, .9f, WOOD).prism(0, 1.35f, -.2f, 1.1f, .9f, .9f, 4, 0xd8c8a0);
+    static final Mesh PEARL = m().blob(0, 0, 0, .14f, .14f, .14f, 3, 8, 0xf4f0ff | Mesh.GLOW, 0).blob(0, -.1f, 0, .3f, .08f, .25f, 2, 6, 0x8a7a9a, .1f);
+
+    // ---- under the sea ----------------------------------------------------------------------------
+
+    static final Mesh KELP = m().vary(.12f).prism(0, 0, 0, .09f, .05f, 4.5f, 4, 0x3a6a2a).prism(.4f, 0, .2f, .08f, .04f, 3.4f, 4, 0x4a7a32)
+            .prism(-.3f, 0, -.3f, .08f, .04f, 5.4f, 4, 0x2f5a26).blob(0, 2.5f, .1f, .25f, .5f, .06f, 2, 5, 0x4a8a3a, .2f).blob(-.3f, 4, -.3f, .22f, .45f, .05f, 2, 5, 0x3a7a30, .2f);
+    static final Mesh CORAL = m().vary(.15f).blob(0, .3f, 0, .7f, .45f, .6f, 3, 6, 0xd86a6a, .3f).prism(.3f, .3f, .1f, .1f, .04f, 1, 5, 0xf08a5a)
+            .prism(-.25f, .3f, -.1f, .1f, .04f, .8f, 5, 0xe8a83a).blob(.5f, .2f, -.4f, .35f, .25f, .3f, 2, 5, 0x9a5ab8, .3f).blob(-.5f, .15f, .4f, .3f, .2f, .3f, 2, 5, 0x5ab8a8, .3f);
+    static final Mesh WRECK = m().vary(.08f).box(0, .9f, 0, 1.8f, .9f, 6, 0x5a3e26).box(0, 1.9f, -1, 1.7f, .1f, 4.5f, 0x6a4a2e).box(0, 1.2f, 6.2f, 1, .7f, .6f, 0x4a3420)
+            .prism(0, 1.9f, 1, .14f, .1f, 6.5f, 6, 0x5a3e26).box(0, 6, 1, 2.2f, .08f, .06f, 0x5a3e26).box(.9f, 4.4f, 1, .05f, 1.4f, .9f, 0xb8b0a0);
+    static final Mesh PILLAR = m().vary(.06f).prism(0, 0, 0, .7f, .6f, 3.2f, 10, 0xb8b0a0).prism(0, 0, 0, 1, 1, .4f, 10, 0xa8a090).blob(.9f, .3f, .6f, .6f, .35f, .5f, 2, 5, 0xa8a090, .25f);
+    static final Mesh FISH = m().blob(0, 0, 0, .07f, .09f, .22f, 2, 6, 0xe8a83a, 0).prism(0, 0, -.22f, .01f, .1f, .05f, 3, 0xd88a2a);
+
     static {
         for (int i = 0; i < 7; i++) FIREPIT.blob(M.sin(i * .9f) * .9f, .1f, M.cos(i * .9f) * .9f, .25f, .18f, .25f, 2, 4, 0x777068, .2f);
         FIREPIT.box(0, .12f, 0, .6f, .07f, .07f, BARK).box(0, .16f, 0, .07f, .07f, .6f, BARK);

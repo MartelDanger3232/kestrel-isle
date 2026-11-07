@@ -109,10 +109,14 @@ final class Story {
             if (d < 12) g.tip("shrine", "A Lantern Shrine. Rest here (E) to heal, refill your draughts, level up and travel. Resting wakes the monsters again.");
             if (d < 2.6f) g.offer(d, "Rest at the Lantern Shrine", () -> rest(id, sh[0], sh[1], sh[2]));
         }
-        for (Places.Npc n : pl.npcs) {
+        for (Places.Npc n : pl.everyone) {
             float d = M.dist(h.x, h.z, n.x(), n.z());
-            if (d < 2.6f) g.offer(d, "Talk to " + name(n.id()), () -> talkTo(n));
+            if (d >= 2.6f) continue;
+            if (n.downT > 0) g.offer(d, name(n) + (n.folk ? " is dead." : " is out cold."), null);
+            else if (h.wanted > 0) g.offer(d, name(n) + " won't talk to an outlaw.", null);
+            else g.offer(d, "Talk to " + name(n), () -> talkTo(n));
         }
+        if (g.dungeon == null) g.jobs.fieldEvents();
         for (Places.Chest c : pl.chests) {
             float d = M.dist(h.x, h.z, c.x, c.z);
             if (c.anim == 0 && d < 2.2f && Math.abs(h.y - c.y) < 1.5f) g.offer(d, "Open", () -> openChest(c));
@@ -140,6 +144,8 @@ final class Story {
         }
     }
 
+    static String name(Places.Npc n) { return n.folk ? n.name : name(n.id()); }
+
     private static String name(String id) {
         return switch (id) {
             case "elder" -> "Elder Maren";
@@ -152,7 +158,31 @@ final class Story {
         };
     }
 
+    /** What townsfolk talk about: gossip, the guard, and the sea. */
+    private static final String[] CHATTER = {
+            "Kingsreach has stood three hundred years. The royal guard makes sure it stands three hundred more.",
+            "Mind your blade in town. The guard don't care who started it, only who's still holding a sword.",
+            "They say there's a wreck out in the shallows with its chest still aboard. I can't hold my breath that long.",
+            "The fish market opens at dawn. By noon the gulls own it.",
+            "Hold your breath long enough and the sea shows you things. Just don't hold it too long.",
+            "My cousin swears the Stormdrake took a goat right off his roof. The goat, I mean. Not the roof.",
+            "If the guard are after you, run far and stay out of sight. They give up eventually. They're paid by the day, not by the catch.",
+            "There are old stone columns out under the water, like a town the sea swallowed. Nobody remembers its name.",
+            "The castle bells ring whenever someone's wanted. I heard them twice this week.",
+            "Brindle? Lovely little place. Quiet. Too quiet, if you ask the gulls.",
+            "Kelp grows thick off the coast. Fish everywhere. Pearls too, if you've the lungs for it.",
+            "Don't you go picking fights. My brother's in the guard, and he's bigger than you."};
+
+    private void chatter(Places.Npc n) {
+        int k = Math.floorMod(n.id().hashCode() + (int) (g.time / 90), CHATTER.length);
+        g.talk(n.name, null, CHATTER[k]);
+    }
+
     void talkTo(Places.Npc n) {
+        if (n.folk) {
+            chatter(n);
+            return;
+        }
         Game.Gear gear = g.gear;
         switch (n.id()) {
             case "elder" -> elder();
@@ -349,6 +379,12 @@ final class Story {
             case "dye-gold" -> grant(2, 5, this::save);
             case "dye-snow" -> grant(2, 6, this::save);
             default -> {
+                if (c.id.startsWith("wreck") || c.id.startsWith("ruin")) {
+                    g.gear.gleams += 500;
+                    g.itemGet(Models.GLEAM[2], "500 gleams", c.id.startsWith("wreck") ? "Sunken treasure from the wreck's hold, still bright under the silt."
+                            : "An offering left in the drowned ruins, long ago, by people nobody remembers.", this::save);
+                    return;
+                }
                 g.gear.gleams += 300;
                 g.itemGet(Models.GLEAM[2], "300 gleams", "A forgotten stash, glittering in the grass.", this::save);
             }
@@ -580,6 +616,9 @@ final class Story {
         }
     }
 
+    /** The town the hero was last in, to name each one on arrival. */
+    private Places.Town lastTown;
+
     void fieldEvents(float dt) {
         tutorials();
         drakeEvents();
@@ -609,7 +648,11 @@ final class Story {
                 "Goodbye, Keeper. Kestrel Isle is yours to keep now.");
         if (g.dungeon != null) return;
         Places pl = g.world.places;
-        boolean village = M.dist(g.hero.x, g.hero.z, pl.villageX, pl.villageZ) < 70;
+        Places.Town town = null;
+        for (Places.Town t : pl.towns) if (M.dist(g.hero.x, g.hero.z, t.x(), t.z()) < t.radius()) town = t;
+        if (town != lastTown && town != null) g.say(town.name().toUpperCase());
+        lastTown = town;
+        boolean village = town != null;
         g.audio.music(g.boss != null ? Audio.BOSS : village ? Audio.VILLAGE : g.climate.isNight() ? Audio.NIGHT : Audio.FIELD);
     }
 
@@ -983,6 +1026,10 @@ final class Story {
 
     /** Resting heals and refills everything, wakes the monsters, and remembers this spot. id < 0 is a dungeon shrine. */
     void rest(int id, float x, float y, float z) {
+        if (g.hero.wanted > 0) {
+            g.say("No resting while the royal guard hunts you. Lose them first.");
+            return;
+        }
         refill();
         respawn = new float[]{g.dungeonIndex, x + 1.2f, y, z - 1.2f};
         if (id >= 0) flags.add("shrine:" + id);
@@ -1445,7 +1492,8 @@ final class Story {
                 gr.arrows, gr.bombs, gr.gleams, gr.pieces, gr.songs, gr.stones, gr.item, g.hero.maxHp, g.hero.hp,
                 gr.hearts, gr.level, gr.vig, gr.end, gr.mnd, gr.str, gr.arc, gr.swordLv, gr.maxFlasks, gr.spells, gr.spell, gr.ascended ? 1 : 0,
                 gr.frostbrand ? 1 : 0, gr.longclaw ? 1 : 0, gr.quests, gr.wolves, gr.windcloak ? 1 : 0, gr.stormcloak ? 1 : 0, gr.sunRelic ? 1 : 0,
-                gr.weapon, gr.weapons, gr.outfit, gr.outfits, gr.dye, gr.dyes};
+                gr.weapon, gr.weapons, gr.outfit, gr.outfits, gr.dye, gr.dyes, gr.job, gr.jobGoal, gr.jobDone, gr.jobX, gr.jobZ, gr.jobPay, gr.renown, gr.homes,
+                g.climate.day};
         StringBuilder sb = new StringBuilder();
         for (int v : nums) sb.append(v).append(',');
         p.setProperty("gear", sb.toString());
@@ -1525,6 +1573,17 @@ final class Story {
                 gr.outfits = n[37] | 1;
                 gr.dye = n[38];
                 gr.dyes = n[39] | 1;
+            }
+            if (n.length >= 49) {
+                gr.job = n[40];
+                gr.jobGoal = n[41];
+                gr.jobDone = n[42];
+                gr.jobX = n[43];
+                gr.jobZ = n[44];
+                gr.jobPay = n[45];
+                gr.renown = n[46];
+                gr.homes = n[47];
+                g.climate.day = n[48];
             }
         } else gr.hearts = n[13] / 4;
         refill();

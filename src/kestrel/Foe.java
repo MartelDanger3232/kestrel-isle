@@ -2,7 +2,7 @@ package kestrel;
 
 /** Every enemy and boss, with its behaviour, weak points and drawing. */
 final class Foe {
-    enum Kind { THORNLING, BAT, SENTRY, SLIME, IMP, WOLF, STALKER, BRAMBLE, GOLEM, SERPENT, KING, HOARWING, ASHMAW, STORMDRAKE }
+    enum Kind { THORNLING, BAT, SENTRY, SLIME, IMP, WOLF, STALKER, GUARD, BANDIT, BRAMBLE, GOLEM, SERPENT, KING, HOARWING, ASHMAW, STORMDRAKE }
 
     static final int IDLE = 0, CHASE = 1, WINDUP = 2, ATTACK = 3, RECOVER = 4, STUN = 5, DEAD = 6, HIDE = 7, PERCH = 8;
     static final int SWORD = 0, SPIN = 1, ARROW = 2, BOMB = 3, CLAW = 4, STAR = 5;
@@ -15,6 +15,8 @@ final class Foe {
     /** Set by a parry: while it lasts, the next sword blow is a riposte. */
     float riposteT;
     boolean armour = true;
+    /** Put here by a job from a board (a bounty's gang or a monster nest). */
+    boolean job;
     private final float[] pose;
     private final Rig.Anim an = new Rig.Anim();
     private final Rig rig;
@@ -32,6 +34,8 @@ final class Foe {
             case SLIME -> 4;
             case WOLF -> 5;
             case STALKER -> 4;
+            case GUARD -> 8;
+            case BANDIT -> 9;
             case KING -> 20;
             case HOARWING -> 14;
             case ASHMAW -> 16;
@@ -49,6 +53,8 @@ final class Foe {
             case WOLF -> Characters.WOLF;
             case HOARWING -> Characters.HOARWING;
             case STALKER -> Characters.STALKER;
+            case GUARD -> Characters.GUARD;
+            case BANDIT -> Characters.BANDIT;
             case STORMDRAKE -> Characters.STORMDRAKE;
             default -> null;
         };
@@ -70,6 +76,8 @@ final class Foe {
             case WOLF -> 12;
             case HOARWING -> 1000;
             case STALKER -> 14;
+            case GUARD -> 15;
+            case BANDIT -> 25;
             case ASHMAW -> 1200;
             case STORMDRAKE -> 2500;
             case BRAMBLE -> 250;
@@ -211,6 +219,7 @@ final class Foe {
 
     boolean damage(Game g, int src, float dmg, float px, float py, float pz) {
         if (!alive() || state == HIDE) return false;
+        if (kind == Kind.GUARD && g.hero.wanted == 0) g.crime(Game.ASSAULT);
         if (riposteT > 0 && (src == SWORD || src == SPIN)) {
             riposteT = 0;
             dmg *= g.gear.weapon == Arms.FANGS ? 5 : 3;
@@ -445,6 +454,7 @@ final class Foe {
             case WOLF -> wolf(dt, g, d, face, near);
             case HOARWING -> hoarwing(dt, g, d, face);
             case STALKER -> stalker(dt, g, d, face, near);
+            case GUARD, BANDIT -> guard(dt, g, d, face, near);
             case ASHMAW -> ashmaw(dt, g, d, face);
             case STORMDRAKE -> drake(dt, g, d, face);
         }
@@ -806,6 +816,64 @@ final class Foe {
     boolean clawable() {
         if (!alive() || state == HIDE) return false;
         return !boss || kind == Kind.HOARWING && state == PERCH || kind == Kind.SERPENT || kind == Kind.KING;
+    }
+
+    /**
+     * The royal guard. They walk their beat and ignore the law-abiding; a wanted player they can see is chased down and struck with the
+     * halberd. Guards who came as reinforcements (bits 2) leave once nobody's wanted; knights (bits 1) are tougher and quicker.
+     */
+    private void guard(float dt, Game g, float d, float face, boolean near) {
+        if (knockback(dt, g)) return;
+        Hero h = g.hero;
+        // Bandits are the guard's opposite number: no law, they just fall on anyone who comes near their camp.
+        boolean bandit = kind == Kind.BANDIT;
+        boolean hunting = h.st != Hero.State.DEAD && (bandit ? d < 30 || state != IDLE && d < 60 : h.wanted > 0), knight = (bits & 1) != 0, extra = (bits & 2) != 0;
+        if (!bandit && hunting && d < 48 && sees(g)) h.seenT = 1;
+        switch (state) {
+            case IDLE -> {
+                if (extra && !hunting) {
+                    // Off duty: march away, and go once out of sight of everyone.
+                    chase(g, 3, dt, face + M.PI);
+                    if (d > 45 || t > 14) {
+                        state = DEAD;
+                        deadT = 99;
+                    }
+                    return;
+                }
+                if (t > 5) {
+                    setState(IDLE);
+                    float home = M.dist(x, z, homeX, homeZ);
+                    yaw = home > 10 ? M.atan2(homeX - x, homeZ - z) : yaw + (M.hash((int) (g.time * 10), (int) homeX) - .5f) * 3;
+                }
+                if (t < 2.5f) chase(g, 1.3f, dt, yaw);
+                if (hunting && d < 40 && near && sees(g)) {
+                    setState(CHASE);
+                    alert = 1;
+                }
+            }
+            case CHASE -> {
+                if (!hunting || d > 90) {
+                    setState(IDLE);
+                    return;
+                }
+                if (d > 1.8f) chase(g, knight ? 6.2f : 5.4f, dt, face);
+                else yaw = M.turn(yaw, face, 8 * dt);
+                if (d < 2.6f && near && cool <= 0) {
+                    setState(WINDUP);
+                    an.restart(Characters.THRUST, .05f);
+                }
+            }
+            case WINDUP -> {
+                yaw = M.turn(yaw, face, 6 * dt);
+                if (t > (knight ? .35f : .45f)) {
+                    if (d < 3 && Math.abs(M.angleDiff(yaw, face)) < .9f) g.hurtHero(knight ? 3 : 2, x, z, true);
+                    setState(RECOVER);
+                    cool = 1.1f;
+                }
+            }
+            case RECOVER -> { if (t > .6f) setState(CHASE); }
+            default -> setState(CHASE);
+        }
     }
 
     private void wolf(float dt, Game g, float d, float face, boolean near) {
@@ -1199,15 +1267,21 @@ final class Foe {
         r.flashCol = frozenT > 0 && flash < .3f ? 0x9fe8ff : 0xffffff;
         float sink = state == DEAD ? deadT * (boss ? 3 : 1) : 0;
         switch (kind) {
-            case THORNLING, SENTRY, IMP -> {
-                float scale = kind == Kind.THORNLING ? .75f : kind == Kind.IMP ? .62f : 1.1f;
-                rig.locomote(pose, aux, state == CHASE || state == IDLE && t < 1.2f ? 1 : 0, time + homeX);
+            case THORNLING, SENTRY, IMP, GUARD, BANDIT -> {
+                float scale = kind == Kind.THORNLING ? .75f : kind == Kind.IMP ? .62f : kind == Kind.GUARD || kind == Kind.BANDIT ? (bits & 1) != 0 ? 1.1f : 1 : 1.1f;
+                rig.locomote(pose, aux, state == CHASE || state == IDLE && t < (kind == Kind.GUARD ? 2.5f : 1.2f) ? 1 : 0, time + homeX);
                 if (state == WINDUP || state == RECOVER) an.apply(pose);
                 else an.restart(null, 0);
                 xf.identity().translate(x, y - sink, z).rotY(yaw).scale(scale);
-                rig.draw(r, xf, pose);
-                Xf hand = rig.xf[rig.part("armLR")];
+                Rig body = M.dist(x, z, r.cx, r.cz) > 25 ? Characters.low(rig) : rig;
+                body.draw(r, xf, pose);
+                Xf hand = body.xf[body.part("armLR")];
                 if (kind == Kind.THORNLING) r.mesh(Characters.CLUB, new Xf().set(hand).translate(0, -.27f, 0).rotX(1.2f));
+                if (kind == Kind.BANDIT) r.mesh((bits & 1) != 0 ? Characters.SPEAR : Characters.CLUB, new Xf().set(hand).translate(0, -.27f, 0).rotX((bits & 1) != 0 ? 1.57f : 1.2f));
+                if (kind == Kind.GUARD) {
+                    r.mesh(Characters.SPEAR, new Xf().set(hand).translate(0, -.27f, 0).rotX(1.57f));
+                    if ((bits & 1) != 0) r.mesh(Characters.TOWER_SHIELD, new Xf().set(xf).translate(-.32f, 1.05f, .32f).rotY(-.2f).scale(.8f));
+                }
                 if (kind == Kind.SENTRY) {
                     r.mesh(Characters.SPEAR, new Xf().set(hand).translate(0, -.27f, 0).rotX(1.57f));
                     if (armour) r.mesh(Characters.TOWER_SHIELD, new Xf().set(xf).translate(-.32f, 1.05f, .32f).rotY(-.2f));

@@ -138,7 +138,8 @@ final class Scene {
             cy = camTy - fy * camDist + camLift;
             cz = tz - fz * camDist;
             float w = g.level.water(cx, cz);
-            if (!Float.isNaN(w)) cy = Math.max(cy, w + .3f);
+            // Above the water the camera stays above it; following a diver down, it stays below.
+            if (!Float.isNaN(w)) cy = g.hero.st == Hero.State.DIVE ? Math.min(cy, w - .35f) : Math.max(cy, w + .3f);
         }
         float sh = g.shake * .04f;
         r.camera(cx, cy, cz, yaw + M.sin(g.time * 53) * sh, pitch + M.sin(g.time * 41) * sh);
@@ -156,11 +157,12 @@ final class Scene {
         for (Places.Building b : pl.buildings) {
             if (M.dist(b.x(), b.z(), r.cx, r.cz) > 420 || !r.visible(b.x(), b.y() + 2, b.z(), 6)) continue;
             r.mesh(b.mesh(), xf.identity().translate(b.x(), b.y(), b.z()).rotY(b.yaw()));
-            if (night && (b.mesh() == Models.HOUSE || b.mesh() == Models.SHOP)) {
+            float far = M.dist(b.x(), b.z(), r.cx, r.cz);
+            if (night && far < 140 && (b.mesh() == Models.HOUSE || b.mesh() == Models.SHOP)) {
                 r.mesh(b.mesh() == Models.HOUSE ? Models.HOUSE_LIT : Models.SHOP_LIT, xf);
                 r.light(b.x(), b.y() + 1.6f, b.z(), 0xffb060, 11);
             }
-            if (b.mesh() == Models.HOUSE && M.dist(b.x(), b.z(), r.cx, r.cz) < 170) smoke(b);
+            if (b.mesh() == Models.HOUSE && far < 120) smoke(b);
         }
         for (Places.Gate gt : pl.gates) {
             if (M.dist(gt.x, gt.z, r.cx, r.cz) > 900 || !r.visible(gt.x, gt.y + 6, gt.z, 18)) continue;
@@ -215,16 +217,51 @@ final class Scene {
             if (M.dist(tn[0], tn[2], r.cx, r.cz) < 250 && r.visible(tn[0], tn[1] + 1.2f, tn[2], 2.5f)) r.mesh(Models.TENT, xf.identity().translate(tn[0], tn[1], tn[2]).rotY(tn[3]));
         for (float[] s : pl.shrines)
             if (M.dist(s[0], s[2], r.cx, r.cz) < 500 && r.visible(s[0], s[1] + 1, s[2], 2.5f)) r.mesh(Models.SHRINE, xf.identity().translate(s[0], s[1], s[2]));
-        for (Places.Npc n : pl.npcs) {
-            if (M.dist(n.x(), n.z(), r.cx, r.cz) > 160 || !r.visible(n.x(), n.y() + 1, n.z(), 1.5f)) continue;
+        for (Places.Npc n : pl.everyone) {
+            // Townsfolk are many, so they're only drawn close by; a fallen one stays down a while, then is gone.
+            if (M.dist(n.x(), n.z(), r.cx, r.cz) > (n.folk ? 90 : 160) || n.folk && n.downT > 0 && n.downT < 120 || !r.visible(n.x(), n.y() + 1, n.z(), 1.5f)) continue;
             float near = M.dist(n.x(), n.z(), g.hero.x, g.hero.z);
+            float[] pose = npcPose.computeIfAbsent(n.id(), k -> n.rig().newPose());
+            // Past arm's length nobody can tell the sculpted body from its simple stand-in, and the stand-in is far cheaper.
+            Rig body = M.dist(n.x(), n.z(), r.cx, r.cz) > 22 ? Characters.low(n.rig()) : n.rig();
+            r.flash = n.flash * .85f;
+            r.flashCol = 0xff8080;
+            if (n.downT > 0) {
+                body.locomote(pose, 0, 0, 0);
+                body.draw(r, xf.identity().translate(n.x(), n.y() + .2f, n.z()).rotY(n.yaw()).translate(0, .9f, 0).rotX(-1.5f).translate(0, -.9f, 0), pose);
+                r.flash = 0;
+                continue;
+            }
             boolean talking = g.screen == Game.Screen.DIALOG && near < 4, waving = !talking && n.id().equals("child") && near < 9;
             float yaw = near < 6 ? M.atan2(g.hero.x - n.x(), g.hero.z - n.z()) : n.yaw();
-            float[] pose = npcPose.computeIfAbsent(n.id(), k -> n.rig().newPose());
-            n.rig().locomote(pose, n.phase, n.walk, t + n.hx);
+            body.locomote(pose, n.phase, n.walk, t + n.hx);
             if (talking) Characters.TALK.apply(t, 1, pose);
             else if (waving) Characters.WAVE.apply(t, 1, pose);
-            n.rig().draw(r, xf.identity().translate(n.x(), n.y(), n.z()).rotY(yaw).scale(n.id().equals("child") ? .78f : 1), pose);
+            body.draw(r, xf.identity().translate(n.x(), n.y(), n.z()).rotY(n.fleeT > 0 ? n.yaw() : yaw).scale(n.id().equals("child") ? .78f : 1), pose);
+            r.flash = 0;
+        }
+        for (float[] b : pl.boards)
+            if (M.dist(b[0], b[2], r.cx, r.cz) < 200 && r.visible(b[0], b[1] + 1.5f, b[2], 2)) r.mesh(Models.BOARD, xf.identity().translate(b[0], b[1], b[2]).rotY(b[4] + M.PI / 2));
+        for (float[] c : pl.carriages)
+            if (M.dist(c[0], c[2], r.cx, r.cz) < 250 && r.visible(c[0], c[1] + 1, c[2], 3)) r.mesh(Models.CART, xf.identity().translate(c[0], c[1], c[2]).rotY(c[3]));
+        g.jobs.draw(r, xf, t);
+        // The sea floor: kelp swaying, coral, wrecks and drowned columns, and fish wheeling over each reef.
+        for (float[] k : pl.reef) {
+            if (M.dist(k[1], k[3], r.cx, r.cz) > 110 || !r.visible(k[1], k[2] + 1, k[3], 6)) continue;
+            int kind = (int) k[0];
+            Mesh m = kind == Places.KELP ? Models.KELP : kind == Places.CORAL ? Models.CORAL : kind == Places.WRECK ? Models.WRECK : Models.PILLAR;
+            xf.identity().translate(k[1], k[2], k[3]).rotY(k[4]);
+            if (kind == Places.KELP) xf.rotZ(M.sin(t * .9f + k[1]) * .08f);
+            if (kind == Places.WRECK) xf.rotZ(.35f).rotX(-.12f);
+            r.mesh(m, xf.scale(k[5]));
+        }
+        for (float[] sc : pl.schools) {
+            if (M.dist(sc[0], sc[2], r.cx, r.cz) > 80) continue;
+            for (int i = 0; i < 14; i++) {
+                float a = t * (.5f + i % 3 * .12f) + i * .45f, rr = sc[3] * (.6f + i % 4 * .12f);
+                float fx = sc[0] + M.sin(a) * rr, fz = sc[2] + M.cos(a) * rr, fy = sc[1] + M.sin(t * 1.3f + i) * .5f + i % 3 * .4f;
+                r.mesh(Models.FISH, xf.identity().translate(fx, fy, fz).rotY(a + M.PI / 2));
+            }
         }
     }
 
@@ -270,6 +307,8 @@ final class Scene {
         boolean flicker = h.invuln > 0 && g.hurtFlash > 0 && ((int) (g.time * 22) & 1) == 0 && h.st != Hero.State.DEAD;
         if (flicker) return;
         xf.identity().translate(h.x, h.y, h.z).rotY(h.yaw);
+        // A diver swims flat out, nose down going deeper and up when rising.
+        if (h.st == Hero.State.DIVE) xf.translate(0, .9f, 0).rotX(1.2f - M.clamp(h.vy, -3, 3) * .18f).translate(0, -.9f, 0);
         boolean bowMode = g.gear.bow && g.gear.bowOut && h.st != Hero.State.RIDE;
         boolean drawn = !bowMode && (h.swordOutT > 0 || h.st == Hero.State.ATTACK || h.st == Hero.State.CHARGE || h.st == Hero.State.SPIN);
         boolean swinging = h.st == Hero.State.ATTACK || h.st == Hero.State.SPIN;

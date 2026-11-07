@@ -1,3 +1,5 @@
 *.sh text eol=lf
 *.java text eol=lf
 *.png binary
+# Checksum lists must keep Unix line endings too, or a Windows checkout fails the download checks.
+*.sha256 text eol=lf

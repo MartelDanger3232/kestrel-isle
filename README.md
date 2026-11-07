@@ -72,6 +72,15 @@ Play the island together, each on your own computer, all with the same version o
 - **Duels:** press **P** to say you're ready to duel (your name tag turns red). Two duellists can lock on to each other with Shift and fight with swords, arrows and spells; blocks and parries work as against foes, and a parried attacker reels. A duel ends when someone is down to their last heart: friends never kill each other.
 - **Connecting:** friends on the same Wi-Fi just type the host's address (like `192.168.1.20`). Across the internet, the easiest way is the free [Tailscale](https://tailscale.com) app on every computer: the host then shares their Tailscale address (`100.x.y.z`). Otherwise, the host forwards TCP port 47777 on their router to their computer and shares their public address.
 
+## Towns, the law and the sea
+
+- **Towns:** Brindle has grown into a market town, and up the road to Rootdeep stands **Kingsreach**, the royal city, with its castle, barracks, church, markets and towers. Both are full of townsfolk going about their day; talk to them for gossip.
+- **The law:** you can attack anyone, but it's a crime. Strike someone and you're **wanted** (one star); kill someone, or a guard, and it climbs, up to five. The royal guard come after you, more of them for every star (knights from four stars up), and townsfolk run. While a guard can see you, the stars flash and more guards arrive. Get far enough away and out of sight, and when the bar under the stars runs out you're no longer wanted. You can't rest at a shrine while wanted, and dying clears it. The island's named folk are only knocked out; townsfolk can be killed and come back a while later.
+- **Jobs:** each town has a job board with three jobs a day: monster culling, bounties on outlaw gangs, deliveries by road, pearl diving and clearing monster nests. Jobs pay gleams and earn renown (Newcomer, Known Name, Trusted Hand, Hero of the Realm, Legend of the Isle). While wanted, the board also takes fines (150 gleams a star) to clear your name.
+- **Homes and carriages:** each town has a house for sale (2500 gleams); sleep there to rest, level up and save, as at a shrine. Carriages run between Brindle, Kingsreach, the nomad camp and the rangers' outpost for 40 gleams a ride.
+- **Pickpocketing:** press **L** behind a townsperson to lift some gleams. From behind it usually works; to their face it usually doesn't, and getting caught makes you wanted.
+- **Underwater:** while swimming, hold **Ctrl** to dive. The shallows hold reefs of kelp and coral, schools of fish, pearls, and wrecks and drowned ruins with chests in them. Your breath (the bubbles) lasts 30 seconds; after that you start to drown.
+
 ## Controls
 
 | | |
@@ -81,6 +90,8 @@ Play the island together, each on your own computer, all with the same version o
 | Space | roll; while locked on, side-hop (A/D) or back-flip (S); in mid-air, open or fold the Windcloak; in rising warm air, take off |
 | Shift (hold) | lock on to the nearest foe in front (or duelling friend); with nobody there it does nothing |
 | P | co-op: ready to duel (both players press it to fight each other) |
+| Ctrl (swimming) | dive; hold Ctrl to go deeper, Space to rise |
+| L | pick the pocket of the townsperson in front of you |
 | Click / J | sword (3-hit combo; hold, then release for a spin attack) |
 | K / right-click | shield (raise it just as a blow lands to parry) |
 | F | use item (bow and claw: hold to aim, release to fire; bombs: F to light, F to throw) |
