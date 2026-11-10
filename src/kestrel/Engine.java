@@ -285,6 +285,10 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
         if (bot) drive(dt);
         // A bug in one frame must never freeze the game: report it and keep running.
         try {
+            if (in.pressed(KeyEvent.VK_F6)) {
+                setQuality((quality + 2) % 3);
+                game.say("Graphics: " + new String[]{"low", "medium", "high"}[quality] + " (F6 changes it)");
+            }
             game.update(dt);
             // Q also swaps items, and the game pauses itself whenever the window loses focus, so quitting takes Q twice.
             if (game.screen != Game.Screen.PAUSE) quitArmed = false;
@@ -305,8 +309,8 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
             frames = 0;
             fpsT = 0;
             // If the frame rate sags for a few seconds, the costliest effects step down (they never come back up).
-            slow = fps < 50 && elapsed > 3 ? slow + 1 : 0;
-            if (slow >= 3 && quality > 0) {
+            slow = fps < 54 && elapsed > 3 ? slow + 1 : 0;
+            if (slow >= 2 && quality > 0) {
                 lower();
                 slow = 0;
             }
@@ -338,15 +342,17 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
         in.force(KeyEvent.VK_J, swing);
     }
 
-    private void lower() {
-        if (--quality == 1) {
-            ssao.setEnabled(false);
-            rays.setNbSamples(24);
-        } else {
-            shadows.setEdgeFilteringMode(EdgeFilteringMode.PCF4);
-            water.setUseHQShoreline(false);
-            water.setUseCaustics(false);
-        }
+    private void lower() { setQuality(quality - 1); }
+
+    /** 2 = everything, 1 = no ambient occlusion, cheaper god rays, no caustics, 0 = also cheap shadows, no god rays, no foam shoreline. */
+    private void setQuality(int q) {
+        quality = q;
+        ssao.setEnabled(q >= 2);
+        rays.setEnabled(q >= 1);
+        rays.setNbSamples(q >= 2 ? 40 : 24);
+        water.setUseCaustics(q >= 2);
+        water.setUseHQShoreline(q >= 1);
+        shadows.setEdgeFilteringMode(q >= 2 ? EdgeFilteringMode.PCFPOISSON : EdgeFilteringMode.PCF4);
     }
 
     /** Dev screenshots: each gets a freshly posed game and half a second to settle, then a capture. */

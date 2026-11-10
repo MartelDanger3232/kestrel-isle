@@ -96,6 +96,7 @@ Play the island together, each on your own computer, all with the same version o
 | K / right-click | shield (raise it just as a blow lands to parry) |
 | F | use item (bow and claw: hold to aim, release to fire; bombs: F to light, F to throw) |
 | Q | switch item |
+| F6 | graphics quality: low, medium, high (it also drops by itself if the frame rate sags) |
 | C · V | cast spell · switch spell (spells use spirit, the blue bar) |
 | R | drink an Ember Draught (refilled at Lantern Shrines) |
 | T, then 1-5 | play the windflute (the Song of the Steed calls Juniper the horse) |
