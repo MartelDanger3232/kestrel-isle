@@ -29,7 +29,7 @@ case "$(uname -s)" in
     Darwin) name="Kestrel Isle"; opts+=(--java-options -XstartOnFirstThread) ;;
     *) name="KestrelIsle" ;;
 esac
-jpackage --type app-image --name "$name" --app-version 2.2 --vendor "Kestrel Isle" \
+jpackage --type app-image --name "$name" --app-version 2.3 --vendor "Kestrel Isle" \
     --input build/input --main-jar kestrel-isle.jar --main-class kestrel.Main "${opts[@]}" --dest build/app
 [ -z "$archive" ] && exit 0
 
