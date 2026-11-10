@@ -375,7 +375,13 @@ final class Game {
             return;
         }
         if (in.pressed(KeyEvent.VK_CLOSE_BRACKET)) {
-            gear.gleams += 1000;
+            if (coop != null && coop.joined()) {
+                // A friend's gear lives on the host's island, so ask the host to hand the gleams over.
+                List<List<DevItem>> items = devItems();
+                for (int t = 0; t < items.size(); t++)
+                    for (int r = 0; r < items.get(t).size(); r++)
+                        if (items.get(t).get(r).name().equals("1000 gleams")) coop.dev(t, r, false);
+            } else gear.gleams += 1000;
             sfx(Audio.GLEAM);
             say("DEV +1000 gleams");
         }

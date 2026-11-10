@@ -153,6 +153,7 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
     private DirectionalLightShadowFilter shadows;
     private SSAOFilter ssao;
     private int quality = 2, slow;
+    private boolean joinEased;
     /** Q was pressed once on the pause screen; a second press quits. */
     static boolean quitArmed;
     private WaterFilter water;
@@ -285,6 +286,11 @@ final class Engine extends SimpleApplication implements Renderer.Gpu, RawInputLi
         if (bot) drive(dt);
         // A bug in one frame must never freeze the game: report it and keep running.
         try {
+            // A friend's computer is also drawing the host's world over the network, so joining starts it at medium graphics.
+            if (!joinEased && game.coop != null && game.coop.joined()) {
+                joinEased = true;
+                if (quality > 1) setQuality(1);
+            }
             if (in.pressed(KeyEvent.VK_F6)) {
                 setQuality((quality + 2) % 3);
                 game.say("Graphics: " + new String[]{"low", "medium", "high"}[quality] + " (F6 changes it)");

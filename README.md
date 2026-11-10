@@ -109,7 +109,7 @@ Rolling, swinging and blocking use stamina (the green bar). Rest at Lantern Shri
 
 ## Dev flags
 
-**Dev keys:** `` ` `` (above Tab) completes the current objective (inside a dungeon it finishes the whole dungeon and hands over its rewards), `=` teleports you to the current objective, and `]` gives 1000 gleams. `[` opens the **dev pack**: every weapon, outfit, dye, tool, song, spell, stone and supply in the game, ready to put straight into your inventory (E takes one, F takes a whole tab).
+**Dev keys:** `` ` `` (above Tab) completes the current objective (inside a dungeon it finishes the whole dungeon and hands over its rewards), `=` teleports you to the current objective, and `]` gives 1000 gleams (a co-op friend can press it too; the host hands them over). `[` opens the **dev pack**: every weapon, outfit, dye, tool, song, spell, stone and supply in the game, ready to put straight into your inventory (E takes one, F takes a whole tab).
 
 Blast Pods (glowing orange plants) give 3 bombs each and regrow, so you can't get stuck without bombs.
 
